@@ -92,6 +92,7 @@ class Cmd:
     READNVM = 95
     SETCONFIG = 98
     GETCONFIG = 99
+    SETM1M2POSITION = 121
     SETM1MAXCURRENT = 133
     SETM2MAXCURRENT = 134
     GETM1MAXCURRENT = 135
@@ -340,7 +341,7 @@ def _write1(address, cmd, val):
     return False
 
 
-def _write111(address, cmd, val1, val2):
+def _write11(address, cmd, val1, val2):    #Changing function name, most probably a bug. 
     trys = _trystimeout
     while trys:
         _sendcommand(address, cmd)
@@ -1032,6 +1033,12 @@ def ReadM2PositionPID(address):
         data[2] /= 1024.0
         return data
     return 0, 0, 0, 0, 0, 0, 0, 0
+
+
+def SetM1M2Position(address, posM1, posM2, buffer_on_off):
+    if buffer_on_off != 0:
+        buffer_on_off = 1
+    return _write441(address, Cmd.SETM1M2POSITION, long(posM1), long(posM2), buffer_on_off)
 
 
 def SpeedAccelDeccelPositionM1(address, accel, speed, deccel, position, buffer):

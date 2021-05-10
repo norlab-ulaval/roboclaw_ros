@@ -131,8 +131,7 @@ class Movement:
     def run(self):
         if self.twist is None:
             return
-        # self.last_set_speed_time = rospy.get_rostime()
-
+        
         if self.twist.linear.x != 0 or self.twist.angular.z != 0:
             self.stopped = False
 
@@ -149,23 +148,14 @@ class Movement:
         vr_ticks = int(vr * self.TICKS_PER_METER)  # ticks/s
         vl_ticks = int(vl * self.TICKS_PER_METER)
 
+        print("We are trying to set: vl=" + str(vr_ticks) + " and vr= " + str(vl_ticks))
+
         #print("-- vr_ticks:{} vl_ticks:{}".format(vr_ticks, vl_ticks))
         rospy.logdebug("vr_ticks:%d vl_ticks: %d", vr_ticks, vl_ticks)
 
         try:
-            # This is a hack way to keep a poorly tuned PID from making noise at speed 0
-
-            # if vr_ticks is 0 and vl_ticks is 0:
-            #     roboclaw.ForwardM1(self.address, 0)
-            #     roboclaw.ForwardM2(self.address, 0)
-            # else:
-            #     roboclaw.SpeedM1M2(self.address, vr_ticks, vl_ticks)
-
             if vr_ticks is 0 and vl_ticks is 0:
-                roboclaw.ForwardM1(self.address, 0)
-                roboclaw.ForwardM2(self.address, 0)
-                self.vr_ticks = 0
-                self.vl_ticks = 0
+                self.stop()
             else:
                 gain = 0.5
                 self.vr_ticks = gain * vr_ticks + (1 - gain) * self.vr_ticks
@@ -174,6 +164,10 @@ class Movement:
         except OSError as e:
             rospy.logwarn("SpeedM1M2 OSError: %d", e.errno)
             rospy.logdebug(e)
+
+    def stop(self):
+        roboclaw.SpeedM1M2(self.address, int(0), int(0))
+    
 
 class Node:
     def __init__(self):
@@ -262,18 +256,7 @@ class Node:
         rospy.loginfo("Starting motor drive")
         r_time = rospy.Rate(30)
         while not rospy.is_shutdown():
-
-            # stop movement if robot doesn't recieve commands for 1 sec
-            if (self.STOP_MOVEMENT and not self.movement.stopped and rospy.get_rostime().to_sec() - self.movement.last_set_speed_time.to_sec() > 1):
-                rospy.loginfo("Did not get command for 1 second, stopping")
-                try:
-                    roboclaw.ForwardM1(self.address, 0)
-                    roboclaw.ForwardM2(self.address, 0)
-                except OSError as e:
-                    rospy.logerr("Could not stop")
-                    rospy.logdebug(e)
-                self.movement.stopped = True
-
+            
             # TODO need find solution to the OSError11 looks like sync problem with serial
             status1, enc1, crc1 = None, None, None
             status2, enc2, crc2 = None, None, None
@@ -294,12 +277,24 @@ class Node:
                 rospy.logwarn("ReadEncM2 OSError: %d", e.errno)
                 rospy.logdebug(e)
 
-            if ('enc1' in vars()) and ('enc2' in vars() and enc1 and enc2):
+            if ((enc1 is not None) and (enc2 is not None)):
                 rospy.logdebug(" Encoders %d %d" % (enc1, enc2))
                 if (self.encodm):
                     self.encodm.update_publish(enc1, enc2)
                 self.updater.update()
-            self.movement.run()
+
+            # stop movement if robot doesn't recieve commands for 1 sec
+            if (self.STOP_MOVEMENT and not self.movement.stopped and rospy.get_rostime().to_sec() - self.movement.last_set_speed_time.to_sec() > 1):
+                rospy.loginfo("Did not get command for 1 second, stopping")
+                try:
+                    self.movement.stop()
+                except OSError as e:
+                    rospy.logerr("Could not stop")
+                    rospy.logdebug(e)
+                self.movement.stopped = True
+            else:
+                self.movement.run()
+            
             r_time.sleep()
 
     def cmd_vel_callback(self, twist):
@@ -331,7 +326,7 @@ class Node:
         rospy.loginfo("Shutting down")
         try:
             roboclaw.ForwardM1(self.address, 0)
-            roboclaw.ForwardM2(self.address, 0)
+            roboclaw.ForwardM2(self.address, 0)	
         except OSError:
             rospy.logerr("Shutdown did not work trying again")
             try:
