@@ -85,13 +85,6 @@ class EncoderOdom:
         quat = tf.transformations.quaternion_from_euler(0, 0, cur_theta)
         current_time = rospy.Time.now()
 
-        br = tf.TransformBroadcaster()
-        br.sendTransform((cur_x, cur_y, 0),
-                         tf.transformations.quaternion_from_euler(0, 0, -cur_theta),
-                         current_time,
-                         "base_link",
-                         "odom")
-
         odom = Odometry()
         odom.header.stamp = current_time
         odom.header.frame_id = 'odom'
@@ -236,7 +229,7 @@ class Node:
         self.STOP_MOVEMENT = rospy.get_param("~stop_movement", "true")
 
         self.encodm = None
-        if (self.PUB_ODOM):
+        if self.PUB_ODOM:
             self.encodm = EncoderOdom(self.TICKS_PER_METER, self.BASE_WIDTH)
         self.movement = Movement(self.address, self.MAX_SPEED, self.BASE_WIDTH, self.TICKS_PER_METER)
         self.last_set_speed_time = rospy.get_rostime()
