@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <launch>
 
-    <arg name="dev" default="/dev/ttyACM0"/>
+    <arg name="dev" default="/dev/ttyACM1"/>
     <arg name="baud" default="115200"/>
     <arg name="address" default="128"/>
     <arg name="max_speed" default="2.0"/>
@@ -22,11 +22,11 @@
         <param name="~pub_odom" value="$(arg pub_odom)"/>
         <param name="~stop_movement" value="$(arg stop_movement)"/>
     </node>
-
+<!-- 
     <node pkg="diagnostic_aggregator" type="aggregator_node"
           name="diagnostic_aggregator">
         <rosparam command="load"
                   file="$(find roboclaw_node)/config/roboclaw_diag.yaml"/>
     </node>
-
+-->
 </launch>
