@@ -15,8 +15,9 @@ __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 # TODO need to find some better was of handling OSerror 11 or preventing it, any ideas?
 
 class EncoderOdom:
-    def __init__(self, ticks_per_meter, base_width):
+    def __init__(self, ticks_per_meter, ticks_per_rotation, base_width):
         self.TICKS_PER_METER = ticks_per_meter
+        self.TICKS_PER_ROTATION = ticks_per_rotation
         self.BASE_WIDTH = base_width
         self.odom_pub = rospy.Publisher('/odom', Odometry, queue_size=1)
         self.left_end_pub = rospy.Publisher('/left_enc_vel', Float64, queue_size=1)
@@ -28,8 +29,8 @@ class EncoderOdom:
         self.last_enc_right = 0
         self.last_enc_time = rospy.Time.now()
         self.vel_theta = 0
-        self.left_ticks_count = 0
-        self.right_ticks_count = 0
+        self.left_ang_vel = 0
+        self.right_ang_vel = 0
 
     @staticmethod
     def normalize_angle(angle):
@@ -41,9 +42,9 @@ class EncoderOdom:
 
     def update(self, enc_left, enc_right):
         left_ticks = enc_left - self.last_enc_left
-        self.left_ticks_count = self.left_ticks_count + left_ticks
+        self.left_ang_vel = left_ticks / self.TICKS_PER_ROTATION
         right_ticks = enc_right - self.last_enc_right
-        self.right_ticks_count = self.right_ticks_count + right_ticks
+        self.right_ang_vel = right_ticks / self.TICKS_PER_ROTATION
         self.last_enc_left = enc_left
         self.last_enc_right = enc_right
 
@@ -97,9 +98,9 @@ class EncoderOdom:
         odom.header.frame_id = 'odom'
 
         left_enc = Float64()
-        left_enc.data = self.left_ticks_count
+        left_enc.data = self.left_ang_vel
         right_enc = Float64()
-        right_enc.data = self.right_ticks_count
+        right_enc.data = self.right_ang_vel
 
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
@@ -239,13 +240,14 @@ class Node:
 
         self.MAX_SPEED = float(rospy.get_param("~max_speed", "2.0"))
         self.TICKS_PER_METER = float(rospy.get_param("~ticks_per_meter", "4342.2"))
+        self.TICKS_PER_ROTATION = float(rospy.get_param("~ticks_per_rotation", "2780"))
         self.BASE_WIDTH = float(rospy.get_param("~base_width", "0.315"))
         self.PUB_ODOM = rospy.get_param("~pub_odom", "true")
         self.STOP_MOVEMENT = rospy.get_param("~stop_movement", "true")
 
         self.encodm = None
         if self.PUB_ODOM:
-            self.encodm = EncoderOdom(self.TICKS_PER_METER, self.BASE_WIDTH)
+            self.encodm = EncoderOdom(self.TICKS_PER_METER, self.TICKS_PER_ROTATION, self.BASE_WIDTH)
         self.movement = Movement(self.address, self.MAX_SPEED, self.BASE_WIDTH, self.TICKS_PER_METER)
         self.last_set_speed_time = rospy.get_rostime()
 
