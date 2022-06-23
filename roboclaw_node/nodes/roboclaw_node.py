@@ -28,6 +28,8 @@ class EncoderOdom:
         self.last_enc_right = 0
         self.last_enc_time = rospy.Time.now()
         self.vel_theta = 0
+        self.left_ticks_count = 0
+        self.right_ticks_count = 0
 
     @staticmethod
     def normalize_angle(angle):
@@ -39,7 +41,9 @@ class EncoderOdom:
 
     def update(self, enc_left, enc_right):
         left_ticks = enc_left - self.last_enc_left
+        self.left_ticks_count = self.left_ticks_count + left_ticks
         right_ticks = enc_right - self.last_enc_right
+        self.right_ticks_count = self.right_ticks_count + right_ticks
         self.last_enc_left = enc_left
         self.last_enc_right = enc_right
 
@@ -93,9 +97,9 @@ class EncoderOdom:
         odom.header.frame_id = 'odom'
 
         left_enc = Float64()
-        left_enc.data = left_enc.data + left_ticks
+        left_enc.data = self.left_ticks_count
         right_enc = Float64()
-        right_enc.data = right_enc.data + right_ticks
+        right_enc.data = self.right_ticks_count
 
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
