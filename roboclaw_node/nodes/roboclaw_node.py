@@ -8,6 +8,7 @@ import rospy
 import tf
 from geometry_msgs.msg import Quaternion, Twist
 from nav_msgs.msg import Odometry
+from std_msgs import Float64
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
@@ -18,6 +19,8 @@ class EncoderOdom:
         self.TICKS_PER_METER = ticks_per_meter
         self.BASE_WIDTH = base_width
         self.odom_pub = rospy.Publisher('/odom', Odometry, queue_size=1)
+        self.left_end_pub = rospy.Publisher('/left_enc_vel', Float64, queue_size=1)
+        self.right_end_pub = rospy.Publisher('/right_enc_vel', Float64, queue_size=1)
         self.cur_x = 0
         self.cur_y = 0
         self.cur_theta = 0.0
@@ -68,7 +71,7 @@ class EncoderOdom:
             vel_theta = d_theta / d_time
 
         self.vel_theta = vel_theta
-        return vel_x, vel_theta
+        return vel_x, vel_theta, left_ticks, right_ticks
 
     def update_publish(self, enc_left, enc_right):
         # 2106 per 0.1 seconds is max speed, error in the 16th bit is 32768
@@ -78,16 +81,21 @@ class EncoderOdom:
         elif abs(enc_right - self.last_enc_right) > 20000:
             rospy.logerr("Ignoring right encoder jump: cur %d, last %d" % (enc_right, self.last_enc_right))
         else:
-            vel_x, vel_theta = self.update(enc_left, enc_right)
-            self.publish_odom(self.cur_x, self.cur_y, self.cur_theta, vel_x, vel_theta)
+            vel_x, vel_theta, left_ticks, right_ticks = self.update(enc_left, enc_right)
+            self.publish_odom(self.cur_x, self.cur_y, self.cur_theta, vel_x, vel_theta, left_ticks, right_ticks)
 
-    def publish_odom(self, cur_x, cur_y, cur_theta, vx, vth):
+    def publish_odom(self, cur_x, cur_y, cur_theta, vx, vth, left_ticks, right_ticks):
         quat = tf.transformations.quaternion_from_euler(0, 0, cur_theta)
         current_time = rospy.Time.now()
 
         odom = Odometry()
         odom.header.stamp = current_time
         odom.header.frame_id = 'odom'
+
+        left_enc = Float64()
+        left_enc.data = left_ticks
+        right_enc = Float64()
+        right_enc.data = right_ticks
 
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
@@ -108,6 +116,9 @@ class EncoderOdom:
         odom.twist.covariance = odom.pose.covariance
 
         self.odom_pub.publish(odom)
+
+        self.left_end_pub.publish(left_enc)
+        self.right_end_pub.publish(right_enc)
 
 class Movement:
     def __init__(self, address, max_speed, base_width, ticks_per_meter):
