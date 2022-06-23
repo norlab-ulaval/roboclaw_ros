@@ -8,7 +8,7 @@ import rospy
 import tf
 from geometry_msgs.msg import Quaternion, Twist
 from nav_msgs.msg import Odometry
-from std_msgs import Float64
+from std_msgs.msg import Float64
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
