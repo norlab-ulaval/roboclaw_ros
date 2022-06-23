@@ -93,9 +93,9 @@ class EncoderOdom:
         odom.header.frame_id = 'odom'
 
         left_enc = Float64()
-        left_enc.data = left_ticks
+        left_enc.data = left_enc.data + left_ticks
         right_enc = Float64()
-        right_enc.data = right_ticks
+        right_enc.data = right_enc.data + right_ticks
 
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
