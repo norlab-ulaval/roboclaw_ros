@@ -3,9 +3,9 @@ from math import pi, cos, sin
 
 import diagnostic_msgs
 import diagnostic_updater
-import roboclaw_driver.roboclaw_driver as roboclaw
-import rospy
-import tf
+import roboclaw_driver as roboclaw
+import rclpy
+import tf2
 from geometry_msgs.msg import Quaternion, Twist
 from nav_msgs.msg import Odometry
 
