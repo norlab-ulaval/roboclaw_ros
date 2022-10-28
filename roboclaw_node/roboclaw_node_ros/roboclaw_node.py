@@ -3,27 +3,35 @@ from math import pi, cos, sin
 
 import diagnostic_msgs
 import diagnostic_updater
-import roboclaw_driver as roboclaw
+from . import roboclaw_driver as roboclaw
 import rclpy
-import tf2
-from geometry_msgs.msg import Quaternion, Twist
+from rclpy.node import Node
+import tf2_ros
+import tf2_py
+from tf_transformations import quaternion_from_euler
+from geometry_msgs.msg import Quaternion, Twist, TransformStamped
 from nav_msgs.msg import Odometry
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
 # TODO need to find some better was of handling OSerror 11 or preventing it, any ideas?
 
+
 class EncoderOdom:
-    def __init__(self, ticks_per_meter, base_width):
+    def __init__(
+        self, ticks_per_meter, base_width, parent_clock, parent_odom_pub, parent_logger
+    ):
         self.TICKS_PER_METER = ticks_per_meter
         self.BASE_WIDTH = base_width
-        self.odom_pub = rospy.Publisher('/odom', Odometry, queue_size=1)
+        self.clock = parent_clock
+        self.odom_pub = parent_odom_pub
+        self.logger = parent_logger
         self.cur_x = 0
         self.cur_y = 0
         self.cur_theta = 0.0
         self.last_enc_left = 0
         self.last_enc_right = 0
-        self.last_enc_time = rospy.Time.now()
+        self.last_enc_time = self.clock.now()
         self.vel_theta = 0
 
     @staticmethod
@@ -44,7 +52,7 @@ class EncoderOdom:
         dist_right = right_ticks / self.TICKS_PER_METER
         dist = (dist_right + dist_left) / 2.0
 
-        current_time = rospy.Time.now()
+        current_time = self.clock.now()
         d_time = (current_time - self.last_enc_time).to_sec()
         self.last_enc_time = current_time
 
@@ -74,27 +82,41 @@ class EncoderOdom:
         # 2106 per 0.1 seconds is max speed, error in the 16th bit is 32768
         # TODO lets find a better way to deal with this error
         if abs(enc_left - self.last_enc_left) > 20000:
-            rospy.logerr("Ignoring left encoder jump: cur %d, last %d" % (enc_left, self.last_enc_left))
+            self.logger.error(
+                "Ignoring left encoder jump: cur %d, last %d"
+                % (enc_left, self.last_enc_left)
+            )
         elif abs(enc_right - self.last_enc_right) > 20000:
-            rospy.logerr("Ignoring right encoder jump: cur %d, last %d" % (enc_right, self.last_enc_right))
+            self.logger.error(
+                "Ignoring right encoder jump: cur %d, last %d"
+                % (enc_right, self.last_enc_right)
+            )
         else:
             vel_x, vel_theta = self.update(enc_left, enc_right)
             self.publish_odom(self.cur_x, self.cur_y, self.cur_theta, vel_x, vel_theta)
 
     def publish_odom(self, cur_x, cur_y, cur_theta, vx, vth):
-        quat = tf.transformations.quaternion_from_euler(0, 0, cur_theta)
-        current_time = rospy.Time.now()
+        quat = quaternion_from_euler(0, 0, cur_theta)
+        current_time = self.clock.now()
 
-        br = tf.TransformBroadcaster()
-        br.sendTransform((cur_x, cur_y, 0),
-                         tf.transformations.quaternion_from_euler(0, 0, -cur_theta),
-                         current_time,
-                         "base_link",
-                         "odom")
+        t = TransformStamped()
+        t.header.stamp = current_time
+        t.header.frame_id = "base_link"
+        t.child_frame_id = "odom"
+        t.transform.translation.x = cur_x
+        t.transform.translation.y = cur_y
+        t.transform.translation.z = 0.0
+        q = quaternion_from_euler(0, 0, -cur_theta)
+        t.transform.rotation.x = q[0]
+        t.transform.rotation.y = q[1]
+        t.transform.rotation.z = q[2]
+        t.transform.rotation.w = q[3]
+        br = tf2_ros.TransformBroadcaster()
+        br.sendTransform(t)
 
         odom = Odometry()
         odom.header.stamp = current_time
-        odom.header.frame_id = 'odom'
+        odom.header.frame_id = "odom"
 
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
@@ -108,7 +130,7 @@ class EncoderOdom:
         odom.pose.covariance[28] = 99999
         odom.pose.covariance[35] = 0.01
 
-        odom.child_frame_id = 'base_link'
+        odom.child_frame_id = "base_link"
         odom.twist.twist.linear.x = vx
         odom.twist.twist.linear.y = 0
         odom.twist.twist.angular.z = vth
@@ -116,14 +138,25 @@ class EncoderOdom:
 
         self.odom_pub.publish(odom)
 
+
 class Movement:
-    def __init__(self, address, max_speed, base_width, ticks_per_meter):
+    def __init__(
+        self,
+        address,
+        max_speed,
+        base_width,
+        ticks_per_meter,
+        parent_clock,
+        parent_logger,
+    ):
         self.twist = None
         self.address = address
         self.MAX_SPEED = max_speed
         self.BASE_WIDTH = base_width
         self.TICKS_PER_METER = ticks_per_meter
-        self.last_set_speed_time = rospy.get_rostime()
+        self.clock = parent_clock
+        self.logger = parent_logger
+        self.last_set_speed_time = self.clock.now()
         self.vr_ticks = 0
         self.vl_ticks = 0
         self.stopped = True
@@ -149,8 +182,8 @@ class Movement:
         vr_ticks = int(vr * self.TICKS_PER_METER)  # ticks/s
         vl_ticks = int(vl * self.TICKS_PER_METER)
 
-        #print("-- vr_ticks:{} vl_ticks:{}".format(vr_ticks, vl_ticks))
-        rospy.logdebug("vr_ticks:%d vl_ticks: %d", vr_ticks, vl_ticks)
+        # print("-- vr_ticks:{} vl_ticks:{}".format(vr_ticks, vl_ticks))
+        self.logger.debug("vr_ticks:%d vl_ticks: %d", vr_ticks, vl_ticks)
 
         try:
             # This is a hack way to keep a poorly tuned PID from making noise at speed 0
@@ -161,7 +194,7 @@ class Movement:
             # else:
             #     roboclaw.SpeedM1M2(self.address, vr_ticks, vl_ticks)
 
-            if vr_ticks is 0 and vl_ticks is 0:
+            if vr_ticks == 0 and vl_ticks == 0:
                 roboclaw.ForwardM1(self.address, 0)
                 roboclaw.ForwardM2(self.address, 0)
                 self.vr_ticks = 0
@@ -172,106 +205,166 @@ class Movement:
                 self.vl_ticks = gain * vl_ticks + (1 - gain) * self.vl_ticks
                 roboclaw.SpeedM1M2(self.address, int(self.vr_ticks), int(self.vl_ticks))
         except OSError as e:
-            rospy.logwarn("SpeedM1M2 OSError: %d", e.errno)
-            rospy.logdebug(e)
+            self.logger.warn("SpeedM1M2 OSError: %d", e.errno)
+            self.logger.debug(e)
 
-class Node:
+
+class RoboclawNode(Node):
     def __init__(self):
+        super().__init__("roboclaw_node")
+        self.ERRORS = {
+            0x0000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "Normal"),
+            0x0001: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M1 over current"),
+            0x0002: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M2 over current"),
+            0x0004: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Emergency Stop"),
+            0x0008: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Temperature1"),
+            0x0010: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Temperature2"),
+            0x0020: (
+                diagnostic_msgs.msg.DiagnosticStatus.ERROR,
+                "Main batt voltage high",
+            ),
+            0x0040: (
+                diagnostic_msgs.msg.DiagnosticStatus.ERROR,
+                "Logic batt voltage high",
+            ),
+            0x0080: (
+                diagnostic_msgs.msg.DiagnosticStatus.ERROR,
+                "Logic batt voltage low",
+            ),
+            0x0100: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M1 driver fault"),
+            0x0200: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M2 driver fault"),
+            0x0400: (
+                diagnostic_msgs.msg.DiagnosticStatus.WARN,
+                "Main batt voltage high",
+            ),
+            0x0800: (
+                diagnostic_msgs.msg.DiagnosticStatus.WARN,
+                "Main batt voltage low",
+            ),
+            0x1000: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "Temperature1"),
+            0x2000: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "Temperature2"),
+            0x4000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "M1 home"),
+            0x8000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "M2 home"),
+        }
 
-        self.ERRORS = {0x0000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "Normal"),
-                       0x0001: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M1 over current"),
-                       0x0002: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M2 over current"),
-                       0x0004: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Emergency Stop"),
-                       0x0008: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Temperature1"),
-                       0x0010: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Temperature2"),
-                       0x0020: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Main batt voltage high"),
-                       0x0040: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Logic batt voltage high"),
-                       0x0080: (diagnostic_msgs.msg.DiagnosticStatus.ERROR, "Logic batt voltage low"),
-                       0x0100: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M1 driver fault"),
-                       0x0200: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M2 driver fault"),
-                       0x0400: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "Main batt voltage high"),
-                       0x0800: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "Main batt voltage low"),
-                       0x1000: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "Temperature1"),
-                       0x2000: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "Temperature2"),
-                       0x4000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "M1 home"),
-                       0x8000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "M2 home")}
+        self.get_logger().info("Connecting to roboclaw")
 
-        rospy.init_node("roboclaw_node")
-        rospy.on_shutdown(self.shutdown)
-        rospy.loginfo("Connecting to roboclaw")
-        dev_name = rospy.get_param("~dev", "/dev/ttyACM0")
-        baud_rate = int(rospy.get_param("~baud", "115200"))
+        self.declare_parameter("~dev", "/dev/ttyACM0")
+        dev_name = self.get_parameter("~dev").get_parameter_value().string_value
 
-        self.address = int(rospy.get_param("~address", "128"))
+        self.declare_parameter("~baud", "115200")
+        baud_rate = int(self.get_parameter("~baud").get_parameter_value().string_value)
+
+        self.declare_parameter("~address", "128")
+        self.address = int(
+            self.get_parameter("~address").get_parameter_value().string_value
+        )
         if self.address > 0x87 or self.address < 0x80:
-            rospy.logfatal("Address out of range")
-            rospy.signal_shutdown("Address out of range")
+            self.get_logger().fatal("Address out of range")
+            self.shutdown("Address out of range")
 
         # TODO need someway to check if address is correct
         try:
             roboclaw.Open(dev_name, baud_rate)
         except Exception as e:
-            rospy.logfatal("Could not connect to Roboclaw")
-            rospy.logdebug(e)
-            rospy.signal_shutdown("Could not connect to Roboclaw")
+            self.get_logger().fatal("Could not connect to Roboclaw")
+            self.get_logger().debug(e)
+            self.shutdown("Could not connect to Roboclaw")
 
-        self.updater = diagnostic_updater.Updater()
+        self.updater = diagnostic_updater.Updater(self)
         self.updater.setHardwareID("Roboclaw")
-        self.updater.add(diagnostic_updater.
-                         FunctionDiagnosticTask("Vitals", self.check_vitals))
+        self.updater.add(
+            diagnostic_updater.FunctionDiagnosticTask("Vitals", self.check_vitals)
+        )
 
         try:
             version = roboclaw.ReadVersion(self.address)
         except Exception as e:
-            rospy.logwarn("Problem getting roboclaw version")
-            rospy.logdebug(e)
+            self.get_logger().warn("Problem getting roboclaw version")
+            self.get_logger().warn(e)
             pass
 
         if not version[0]:
-            rospy.logwarn("Could not get version from roboclaw")
+            self.get_logger().warn("Could not get version from roboclaw")
         else:
-            rospy.logdebug(repr(version[1]))
+            self.get_logger().debug(repr(version[1]))
 
         roboclaw.SpeedM1M2(self.address, 0, 0)
         roboclaw.ResetEncoders(self.address)
 
-        self.MAX_SPEED = float(rospy.get_param("~max_speed", "2.0"))
-        self.TICKS_PER_METER = float(rospy.get_param("~ticks_per_meter", "4342.2"))
-        self.BASE_WIDTH = float(rospy.get_param("~base_width", "0.315"))
-        self.PUB_ODOM = rospy.get_param("~pub_odom", "true")
-        self.STOP_MOVEMENT = rospy.get_param("~stop_movement", "true")
+        self.declare_parameter("~max_speed", "2.0")
+        self.MAX_SPEED = float(
+            self.get_parameter("~max_speed").get_parameter_value().string_value
+        )
+        self.declare_parameter("~ticks_per_meter", "4342.2")
+        self.TICKS_PER_METER = float(
+            self.get_parameter("~ticks_per_meter").get_parameter_value().string_value
+        )
+        self.declare_parameter("~base_width", "0.315")
+        self.BASE_WIDTH = float(
+            self.get_parameter("~base_width").get_parameter_value().string_value
+        )
+        self.declare_parameter("~pub_odom", "true")
+        self.PUB_ODOM = bool(
+            self.get_parameter("~pub_odom").get_parameter_value().string_value
+        )
+        self.declare_parameter("~stop_movement", "true")
+        self.STOP_MOVEMENT = bool(
+            self.get_parameter("~stop_movement").get_parameter_value().string_value
+        )
 
         self.encodm = None
-        if (self.PUB_ODOM):
-            self.encodm = EncoderOdom(self.TICKS_PER_METER, self.BASE_WIDTH)
-        self.movement = Movement(self.address, self.MAX_SPEED, self.BASE_WIDTH, self.TICKS_PER_METER)
-        self.last_set_speed_time = rospy.get_rostime()
+        if self.PUB_ODOM:
+            self.odom_pub = self.create_publisher(Odometry, "/odom", 1)
+            self.encodm = EncoderOdom(
+                self.TICKS_PER_METER,
+                self.BASE_WIDTH,
+                self.get_clock(),
+                self.odom_pub,
+                self.get_logger(),
+            )
+        self.movement = Movement(
+            self.address,
+            self.MAX_SPEED,
+            self.BASE_WIDTH,
+            self.TICKS_PER_METER,
+            self.get_clock(),
+            self.get_logger(),
+        )
+        self.last_set_speed_time = self.get_clock().now()
 
-        rospy.Subscriber("cmd_vel", Twist, self.cmd_vel_callback, queue_size=1)
+        self.cmd_vel_sub = self.create_subscription(
+            Twist, "/cmd_vel", self.cmd_vel_callback, 1
+        )
+        self.get_clock().sleep_for(rclpy.duration.Duration(seconds=1.0))
 
-        rospy.sleep(1)
-
-        rospy.logdebug("dev %s", dev_name)
-        rospy.logdebug("baud %d", baud_rate)
-        rospy.logdebug("address %d", self.address)
-        rospy.logdebug("max_speed %f", self.MAX_SPEED)
-        rospy.logdebug("ticks_per_meter %f", self.TICKS_PER_METER)
-        rospy.logdebug("base_width %f", self.BASE_WIDTH)
+        self.get_logger().debug("dev " + dev_name)
+        self.get_logger().debug("baud " + str(baud_rate))
+        self.get_logger().debug("address " + str(self.address))
+        self.get_logger().debug("max_speed " + str(self.MAX_SPEED))
+        self.get_logger().debug("ticks_per_meter " + str(self.TICKS_PER_METER))
+        self.get_logger().debug("base_width " + str(self.BASE_WIDTH))
 
     def run(self):
-        rospy.loginfo("Starting motor drive")
-        r_time = rospy.Rate(30)
-        while not rospy.is_shutdown():
+        self.get_logger().info("Starting motor drive")
+        r_time = self.create_rate(30)
+        while rclpy.ok():
 
             # stop movement if robot doesn't recieve commands for 1 sec
-            if (self.STOP_MOVEMENT and not self.movement.stopped and rospy.get_rostime().to_sec() - self.movement.last_set_speed_time.to_sec() > 1):
-                rospy.loginfo("Did not get command for 1 second, stopping")
+            if (
+                self.STOP_MOVEMENT
+                and not self.movement.stopped
+                and self.get_clock().now().to_sec()
+                - self.movement.last_set_speed_time.to_sec()
+                > 1
+            ):
+                self.get_logger().info("Did not get command for 1 second, stopping")
                 try:
                     roboclaw.ForwardM1(self.address, 0)
                     roboclaw.ForwardM2(self.address, 0)
                 except OSError as e:
-                    rospy.logerr("Could not stop")
-                    rospy.logdebug(e)
+                    self.get_logger().error("Could not stop")
+                    self.get_logger().debug(e)
                 self.movement.stopped = True
 
             # TODO need find solution to the OSError11 looks like sync problem with serial
@@ -283,27 +376,30 @@ class Node:
             except ValueError:
                 pass
             except OSError as e:
-                rospy.logwarn("ReadEncM1 OSError: %d", e.errno)
-                rospy.logdebug(e)
+                self.get_logger().warn("ReadEncM1 OSError: %d", e.errno)
+                self.get_logger().debug(e)
 
             try:
                 status2, enc2, crc2 = roboclaw.ReadEncM2(self.address)
             except ValueError:
                 pass
             except OSError as e:
-                rospy.logwarn("ReadEncM2 OSError: %d", e.errno)
-                rospy.logdebug(e)
-
-            if ('enc1' in vars()) and ('enc2' in vars() and enc1 and enc2):
-                rospy.logdebug(" Encoders %d %d" % (enc1, enc2))
-                if (self.encodm):
+                self.get_logger().warn("ReadEncM2 OSError: %d", e.errno)
+                self.get_logger().debug(e)
+            self.get_logger().info("Got encoders")
+            if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
+                self.get_logger().debug(" Encoders %d %d" % (enc1, enc2))
+                if self.encodm:
                     self.encodm.update_publish(enc1, enc2)
                 self.updater.update()
+            self.get_logger().info("Update done moving if cmd")
             self.movement.run()
+
             r_time.sleep()
 
     def cmd_vel_callback(self, twist):
-        self.movement.last_set_speed_time = rospy.get_rostime()
+        self.get_logger().info("In cmd_vel callback")
+        self.movement.last_set_speed_time = self.get_clock().now()
         self.movement.twist = twist
 
     # TODO: Need to make this work when more than one error is raised
@@ -311,41 +407,57 @@ class Node:
         try:
             status = roboclaw.ReadError(self.address)[1]
         except OSError as e:
-            rospy.logwarn("Diagnostics OSError: %d", e.errno)
-            rospy.logdebug(e)
+            self.get_logger().warn("Diagnostics OSError: %d", e.errno)
+            self.get_logger().debug(e)
             return
         state, message = self.ERRORS[status]
         stat.summary(state, message)
         try:
-            stat.add("Main Batt V:", float(roboclaw.ReadMainBatteryVoltage(self.address)[1] / 10))
-            stat.add("Logic Batt V:", float(roboclaw.ReadLogicBatteryVoltage(self.address)[1] / 10))
-            stat.add("Temp1 C:", float(roboclaw.ReadTemp(self.address)[1] / 10))
-            stat.add("Temp2 C:", float(roboclaw.ReadTemp2(self.address)[1] / 10))
+            stat.add(
+                "Main Batt V:",
+                str(float(roboclaw.ReadMainBatteryVoltage(self.address)[1] / 10)),
+            )
+            stat.add(
+                "Logic Batt V:",
+                str(float(roboclaw.ReadLogicBatteryVoltage(self.address)[1] / 10)),
+            )
+            stat.add("Temp1 C:", str(float(roboclaw.ReadTemp(self.address)[1] / 10)))
+            stat.add("Temp2 C:", str(float(roboclaw.ReadTemp2(self.address)[1] / 10)))
         except OSError as e:
-            rospy.logwarn("Diagnostics OSError: %d", e.errno)
-            rospy.logdebug(e)
+            self.get_logger().warn("Diagnostics OSError: %d", e.errno)
+            self.get_logger().debug(e)
         return stat
 
     # TODO: need clean shutdown so motors stop even if new msgs are arriving
-    def shutdown(self):
-        rospy.loginfo("Shutting down")
+    def shutdown(self, str_msg):
+        self.get_logger().info("Shutting down :" + str_msg)
         try:
             roboclaw.ForwardM1(self.address, 0)
             roboclaw.ForwardM2(self.address, 0)
         except OSError:
-            rospy.logerr("Shutdown did not work trying again")
+            self.get_logger().error("Shutdown did not work trying again")
             try:
                 roboclaw.ForwardM1(self.address, 0)
                 roboclaw.ForwardM2(self.address, 0)
             except OSError as e:
-                rospy.logerr("Could not shutdown motors!!!!")
-                rospy.logdebug(e)
+                self.get_logger().error("Could not shutdown motors!!!!")
+                self.get_logger().debug(e)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.shutdown(str(exc_value))
+        self.destroy_node()
+        rclpy.shutdown()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    with RoboclawNode() as roboclaw_node:
+        roboclaw_node.run()
 
 
 if __name__ == "__main__":
-    try:
-        node = Node()
-        node.run()
-    except rospy.ROSInterruptException:
-        pass
-    rospy.loginfo("Exiting")
+    main()

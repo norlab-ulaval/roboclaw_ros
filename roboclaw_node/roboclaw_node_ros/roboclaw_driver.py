@@ -8,6 +8,7 @@ _trystimeout = 3
 
 # Command Enums
 
+
 class Cmd:
     M1FORWARD = 0
     M1BACKWARD = 1
@@ -103,6 +104,7 @@ class Cmd:
 
 # Private Functions
 
+
 def crc_clear():
     global _crc
     _crc = 0
@@ -114,7 +116,7 @@ def crc_update(data):
     _crc ^= data << 8
     for bit in range(0, 8):
         if (_crc & 0x8000) == 0x8000:
-            _crc = ((_crc << 1) ^ 0x1021)
+            _crc = (_crc << 1) ^ 0x1021
         else:
             _crc <<= 1
     return
@@ -123,16 +125,16 @@ def crc_update(data):
 def _sendcommand(address, command):
     crc_clear()
     crc_update(address)
-    port.write(chr(address))
+    port.write(address.to_bytes(1, "big"))
     crc_update(command)
-    port.write(chr(command))
+    port.write(command.to_bytes(1, "big"))
     return
 
 
 def _readchecksumword():
     data = port.read(2)
     if len(data) == 2:
-        crc = (ord(data[0]) << 8) | ord(data[1])
+        crc = (data[0] << 8) | data[1]
         return 1, crc
     return 0, 0
 
@@ -179,7 +181,7 @@ def _readslong():
 
 def _writebyte(val):
     crc_update(val & 0xFF)
-    port.write(chr(val & 0xFF))
+    port.write(val.to_bytes(1, "big"))
 
 
 def _writesbyte(val):
@@ -294,7 +296,9 @@ def _read_n(address, cmd, args):
             break
         failed = False
         _sendcommand(address, cmd)
-        data = [1, ]
+        data = [
+            1,
+        ]
         for i in range(0, args):
             val = _readlong()
             if val[0] == 0:
@@ -689,10 +693,11 @@ def _write444444441(address, cmd, val1, val2, val3, val4, val5, val6, val7, val8
 
 # User accessible functions
 
+
 def SendRandomData(cnt):
     for i in range(0, cnt):
         byte = random.getrandbits(8)
-        port.write(chr(byte))
+        port.write(byte.to_bytes(1, "big"))
     return
 
 
@@ -787,7 +792,7 @@ def ReadVersion(address):
                 crc_update(val)
                 if val == 0:
                     break
-                str += data[0]
+                str += chr(data[0])
             else:
                 passed = False
                 break
@@ -816,7 +821,9 @@ def ReadMainBatteryVoltage(address):
     return _read2(address, Cmd.GETMBATT)
 
 
-def ReadLogicBatteryVoltage(address, ):
+def ReadLogicBatteryVoltage(
+    address,
+):
     return _read2(address, Cmd.GETLBATT)
 
 
@@ -829,11 +836,15 @@ def SetMaxVoltageLogicBattery(address, val):
 
 
 def SetM1VelocityPID(address, p, i, d, qpps):
-    return _write4444(address, Cmd.SETM1PID, long(d * 65536), long(p * 65536), long(i * 65536), qpps)
+    return _write4444(
+        address, Cmd.SETM1PID, int(d * 65536), int(p * 65536), int(i * 65536), qpps
+    )
 
 
 def SetM2VelocityPID(address, p, i, d, qpps):
-    return _write4444(address, Cmd.SETM2PID, long(d * 65536), long(p * 65536), long(i * 65536), qpps)
+    return _write4444(
+        address, Cmd.SETM2PID, int(d * 65536), int(p * 65536), int(i * 65536), qpps
+    )
 
 
 def ReadISpeedM1(address):
@@ -889,7 +900,9 @@ def SpeedDistanceM2(address, speed, distance, buffer):
 
 
 def SpeedDistanceM1M2(address, speed1, distance1, speed2, distance2, buffer):
-    return _writeS44S441(address, Cmd.MIXEDSPEEDDIST, speed1, distance1, speed2, distance2, buffer)
+    return _writeS44S441(
+        address, Cmd.MIXEDSPEEDDIST, speed1, distance1, speed2, distance2, buffer
+    )
 
 
 def SpeedAccelDistanceM1(address, accel, speed, distance, buffer):
@@ -900,8 +913,19 @@ def SpeedAccelDistanceM2(address, accel, speed, distance, buffer):
     return _write4S441(address, Cmd.M2SPEEDACCELDIST, accel, speed, distance, buffer)
 
 
-def SpeedAccelDistanceM1M2(address, accel, speed1, distance1, speed2, distance2, buffer):
-    return _write4S44S441(address, Cmd.MIXEDSPEED2ACCELDIST, accel, speed1, distance1, speed2, distance2, buffer)
+def SpeedAccelDistanceM1M2(
+    address, accel, speed1, distance1, speed2, distance2, buffer
+):
+    return _write4S44S441(
+        address,
+        Cmd.MIXEDSPEED2ACCELDIST,
+        accel,
+        speed1,
+        distance1,
+        speed2,
+        distance2,
+        buffer,
+    )
 
 
 def ReadBuffers(address):
@@ -941,9 +965,20 @@ def SpeedAccelM1M2_2(address, accel1, speed1, accel2, speed2):
     return _write4S44S4(address, Cmd.MIXEDSPEED2ACCEL, accel, speed1, accel2, speed2)
 
 
-def SpeedAccelDistanceM1M2_2(address, accel1, speed1, distance1, accel2, speed2, distance2, buffer):
-    return _write4S444S441(address, Cmd.MIXEDSPEED2ACCELDIST, accel1, speed1, distance1, accel2, speed2, distance2,
-                           buffer)
+def SpeedAccelDistanceM1M2_2(
+    address, accel1, speed1, distance1, accel2, speed2, distance2, buffer
+):
+    return _write4S444S441(
+        address,
+        Cmd.MIXEDSPEED2ACCELDIST,
+        accel1,
+        speed1,
+        distance1,
+        accel2,
+        speed2,
+        distance2,
+        buffer,
+    )
 
 
 def DutyAccelM1(address, accel, duty):
@@ -1005,13 +1040,31 @@ def ReadMinMaxLogicVoltages(address):
 
 
 def SetM1PositionPID(address, kp, ki, kd, kimax, deadzone, min, max):
-    return _write4444444(address, Cmd.SETM1POSPID, long(kd * 1024), long(kp * 1024), long(ki * 1024), kimax, deadzone,
-                         min, max)
+    return _write4444444(
+        address,
+        Cmd.SETM1POSPID,
+        int(kd * 1024),
+        int(kp * 1024),
+        int(ki * 1024),
+        kimax,
+        deadzone,
+        min,
+        max,
+    )
 
 
 def SetM2PositionPID(address, kp, ki, kd, kimax, deadzone, min, max):
-    return _write4444444(address, Cmd.SETM2POSPID, long(kd * 1024), long(kp * 1024), long(ki * 1024), kimax, deadzone,
-                         min, max)
+    return _write4444444(
+        address,
+        Cmd.SETM2POSPID,
+        int(kd * 1024),
+        int(kp * 1024),
+        int(ki * 1024),
+        kimax,
+        deadzone,
+        min,
+        max,
+    )
 
 
 def ReadM1PositionPID(address):
@@ -1035,17 +1088,42 @@ def ReadM2PositionPID(address):
 
 
 def SpeedAccelDeccelPositionM1(address, accel, speed, deccel, position, buffer):
-    return _write44441(address, Cmd.M1SPEEDACCELDECCELPOS, accel, speed, deccel, position, buffer)
+    return _write44441(
+        address, Cmd.M1SPEEDACCELDECCELPOS, accel, speed, deccel, position, buffer
+    )
 
 
 def SpeedAccelDeccelPositionM2(address, accel, speed, deccel, position, buffer):
-    return _write44441(address, Cmd.M2SPEEDACCELDECCELPOS, accel, speed, deccel, position, buffer)
+    return _write44441(
+        address, Cmd.M2SPEEDACCELDECCELPOS, accel, speed, deccel, position, buffer
+    )
 
 
-def SpeedAccelDeccelPositionM1M2(address, accel1, speed1, deccel1, position1, accel2, speed2, deccel2, position2,
-                                 buffer):
-    return _write444444441(address, Cmd.MIXEDSPEEDACCELDECCELPOS, accel1, speed1, deccel1, position1, accel2, speed2,
-                           deccel2, position2, buffer)
+def SpeedAccelDeccelPositionM1M2(
+    address,
+    accel1,
+    speed1,
+    deccel1,
+    position1,
+    accel2,
+    speed2,
+    deccel2,
+    position2,
+    buffer,
+):
+    return _write444444441(
+        address,
+        Cmd.MIXEDSPEEDACCELDECCELPOS,
+        accel1,
+        speed1,
+        deccel1,
+        position1,
+        accel2,
+        speed2,
+        deccel2,
+        position2,
+        buffer,
+    )
 
 
 def SetM1DefaultAccel(address, accel):
