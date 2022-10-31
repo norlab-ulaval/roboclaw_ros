@@ -837,13 +837,15 @@ def SetMaxVoltageLogicBattery(address, val):
 
 def SetM1VelocityPID(address, p, i, d, qpps):
     return _write4444(
-        address, Cmd.SETM1PID, int(d * 65536), int(p * 65536), int(i * 65536), qpps
+        address, Cmd.SETM1PID, int(
+            d * 65536), int(p * 65536), int(i * 65536), qpps
     )
 
 
 def SetM2VelocityPID(address, p, i, d, qpps):
     return _write4444(
-        address, Cmd.SETM2PID, int(d * 65536), int(p * 65536), int(i * 65536), qpps
+        address, Cmd.SETM2PID, int(
+            d * 65536), int(p * 65536), int(i * 65536), qpps
     )
 
 
@@ -856,11 +858,11 @@ def ReadISpeedM2(address):
 
 
 def DutyM1(address, val):
-    return _simplFunctionS2(address, Cmd.M1DUTY, val)
+    return _writeS2(address, Cmd.M1DUTY, val)
 
 
 def DutyM2(address, val):
-    return _simplFunctionS2(address, Cmd.M2DUTY, val)
+    return _writeS2(address, Cmd.M2DUTY, val)
 
 
 def DutyM1M2(address, m1, m2):
@@ -1257,5 +1259,6 @@ def ReadPWMMode(address):
 
 def Open(comport, rate):
     global port
-    port = serial.Serial(comport, baudrate=rate, timeout=0.1, interCharTimeout=0.01)
+    port = serial.Serial(comport, baudrate=rate,
+                         timeout=0.1, interCharTimeout=0.01)
     return

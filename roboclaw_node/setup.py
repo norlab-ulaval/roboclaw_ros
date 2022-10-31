@@ -1,4 +1,4 @@
-## ! DO NOT MANUALLY INVOKE THIS setup.py, USE CATKIN INSTEAD
+## ! DO NOT MANUALLY INVOKE THIS setup.py, USE COLCON INSTEAD
 import os
 from glob import glob
 from setuptools import setup
