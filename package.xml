@@ -2,12 +2,12 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>roboclaw_node_ros</name>
-  <version>0.0.1</version>
-  <description>Node for roboclaw</description>
-  <maintainer email="bwbazemore@uga.edu">Brad Bazemore</maintainer>
+  <version>0.0.2</version>
+  <description>RoboClaw Node</description>
+  <author email="bwbazemore@uga.edu">Brad Bazemore</author>
   <license>BSD</license>
 
-  <author email="bwbazemore@uga.edu">Brad Bazemore</author>
+  <maintainer email="norlabmarmotte@gmail.com">norlab-marmotte</maintainer>
 
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
