@@ -132,7 +132,9 @@ class EncoderOdom:
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
         odom.pose.pose.position.z = 0.0
-        odom.pose.pose.orientation = Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
+        odom.pose.pose.orientation = Quaternion(
+            x=quat[0], y=quat[1], z=quat[2], w=quat[3]
+        )
 
         odom.pose.covariance[0] = 0.01
         odom.pose.covariance[7] = 0.01
