@@ -19,19 +19,20 @@ __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
 class EncoderOdom:
     def __init__(
-        self, ticks_per_meter, base_width, parent_clock, parent_odom_pub, parent_logger
+        self, ticks_per_meter, base_width, parent_clock, parent_odom_pub, parent_logger, parent_node
     ):
         self.TICKS_PER_METER = ticks_per_meter
         self.BASE_WIDTH = base_width
         self.clock = parent_clock
         self.odom_pub = parent_odom_pub
         self.logger = parent_logger
+        self.parent_node = parent_node
         self.cur_x = 0
         self.cur_y = 0
         self.cur_theta = 0.0
         self.last_enc_left = 0
         self.last_enc_right = 0
-        self.last_enc_time = self.clock.now()
+        self.last_enc_time = self.clock.now().nanoseconds
         self.vel_theta = 0
 
     @staticmethod
@@ -52,8 +53,8 @@ class EncoderOdom:
         dist_right = right_ticks / self.TICKS_PER_METER
         dist = (dist_right + dist_left) / 2.0
 
-        current_time = self.clock.now()
-        d_time = (current_time - self.last_enc_time).to_sec()
+        current_time = self.clock.now().nanoseconds
+        d_time = (current_time - self.last_enc_time)
         self.last_enc_time = current_time
 
         # TODO find better what to determine going straight, this means slight deviation is accounted
@@ -68,12 +69,12 @@ class EncoderOdom:
             self.cur_y -= r * (cos(d_theta + self.cur_theta) - cos(self.cur_theta))
             self.cur_theta = self.normalize_angle(self.cur_theta + d_theta)
 
-        if abs(d_time) < 0.000001:
+        if abs(d_time) < 1000:
             vel_x = 0.0
             vel_theta = 0.0
         else:
-            vel_x = dist / d_time
-            vel_theta = d_theta / d_time
+            vel_x = dist / (d_time * 10e-9)
+            vel_theta = d_theta / (d_time * 10e-9)
 
         self.vel_theta = vel_theta
         return vel_x, vel_theta
@@ -83,13 +84,11 @@ class EncoderOdom:
         # TODO lets find a better way to deal with this error
         if abs(enc_left - self.last_enc_left) > 20000:
             self.logger.error(
-                "Ignoring left encoder jump: cur %d, last %d"
-                % (enc_left, self.last_enc_left)
+                "Ignoring left encoder jump: cur "+str(enc_left)+", last "+str(self.last_enc_left)
             )
         elif abs(enc_right - self.last_enc_right) > 20000:
             self.logger.error(
-                "Ignoring right encoder jump: cur %d, last %d"
-                % (enc_right, self.last_enc_right)
+                "Ignoring right encoder jump: cur "+str(enc_right)+", last "+str(self.last_enc_right)
             )
         else:
             vel_x, vel_theta = self.update(enc_left, enc_right)
@@ -100,7 +99,7 @@ class EncoderOdom:
         current_time = self.clock.now()
 
         t = TransformStamped()
-        t.header.stamp = current_time
+        t.header.stamp = current_time.to_msg()
         t.header.frame_id = "base_link"
         t.child_frame_id = "odom"
         t.transform.translation.x = cur_x
@@ -111,17 +110,18 @@ class EncoderOdom:
         t.transform.rotation.y = q[1]
         t.transform.rotation.z = q[2]
         t.transform.rotation.w = q[3]
-        br = tf2_ros.TransformBroadcaster()
+        br = tf2_ros.TransformBroadcaster(self.parent_node)
         br.sendTransform(t)
 
         odom = Odometry()
-        odom.header.stamp = current_time
+        odom.header.stamp = current_time.to_msg()
         odom.header.frame_id = "odom"
 
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
         odom.pose.pose.position.z = 0.0
-        odom.pose.pose.orientation = Quaternion(*quat)
+        self.logger.info(str(quat))
+        odom.pose.pose.orientation = Quaternion(quat)
 
         odom.pose.covariance[0] = 0.01
         odom.pose.covariance[7] = 0.01
@@ -156,7 +156,7 @@ class Movement:
         self.TICKS_PER_METER = ticks_per_meter
         self.clock = parent_clock
         self.logger = parent_logger
-        self.last_set_speed_time = self.clock.now()
+        self.last_set_speed_time = self.clock.now().nanoseconds
         self.vr_ticks = 0
         self.vl_ticks = 0
         self.stopped = True
@@ -164,7 +164,6 @@ class Movement:
     def run(self):
         if self.twist is None:
             return
-        # self.last_set_speed_time = rospy.get_rostime()
 
         if self.twist.linear.x != 0 or self.twist.angular.z != 0:
             self.stopped = False
@@ -182,8 +181,7 @@ class Movement:
         vr_ticks = int(vr * self.TICKS_PER_METER)  # ticks/s
         vl_ticks = int(vl * self.TICKS_PER_METER)
 
-        # print("-- vr_ticks:{} vl_ticks:{}".format(vr_ticks, vl_ticks))
-        self.logger.debug("vr_ticks:%d vl_ticks: %d", vr_ticks, vl_ticks)
+        self.logger.debug("vr_ticks: "+str(vr_ticks)+"vl_ticks: "+str(vl_ticks))
 
         try:
             # This is a hack way to keep a poorly tuned PID from making noise at speed 0
@@ -205,7 +203,7 @@ class Movement:
                 self.vl_ticks = gain * vl_ticks + (1 - gain) * self.vl_ticks
                 roboclaw.SpeedM1M2(self.address, int(self.vr_ticks), int(self.vl_ticks))
         except OSError as e:
-            self.logger.warn("SpeedM1M2 OSError: %d", e.errno)
+            self.logger.warn("SpeedM1M2 OSError: "+str(e.errno))
             self.logger.debug(e)
 
 
@@ -246,6 +244,11 @@ class RoboclawNode(Node):
             0x4000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "M1 home"),
             0x8000: (diagnostic_msgs.msg.DiagnosticStatus.OK, "M2 home"),
         }
+
+        freq = 30
+        self.rate = self.create_rate(freq)
+        period = 1/freq
+        self.timer = self.create_timer(period, self.run)
 
         self.get_logger().info("Connecting to roboclaw")
 
@@ -322,6 +325,7 @@ class RoboclawNode(Node):
                 self.get_clock(),
                 self.odom_pub,
                 self.get_logger(),
+                self
             )
         self.movement = Movement(
             self.address,
@@ -331,7 +335,7 @@ class RoboclawNode(Node):
             self.get_clock(),
             self.get_logger(),
         )
-        self.last_set_speed_time = self.get_clock().now()
+        self.last_set_speed_time = self.get_clock().now().nanoseconds
 
         self.cmd_vel_sub = self.create_subscription(
             Twist, "/cmd_vel", self.cmd_vel_callback, 1
@@ -346,60 +350,52 @@ class RoboclawNode(Node):
         self.get_logger().debug("base_width " + str(self.BASE_WIDTH))
 
     def run(self):
-        self.get_logger().info("Starting motor drive")
-        r_time = self.create_rate(30)
-        while rclpy.ok():
-
-            # stop movement if robot doesn't recieve commands for 1 sec
-            if (
-                self.STOP_MOVEMENT
-                and not self.movement.stopped
-                and self.get_clock().now().to_sec()
-                - self.movement.last_set_speed_time.to_sec()
-                > 1
-            ):
-                self.get_logger().info("Did not get command for 1 second, stopping")
-                try:
-                    roboclaw.ForwardM1(self.address, 0)
-                    roboclaw.ForwardM2(self.address, 0)
-                except OSError as e:
-                    self.get_logger().error("Could not stop")
-                    self.get_logger().debug(e)
-                self.movement.stopped = True
-
-            # TODO need find solution to the OSError11 looks like sync problem with serial
-            status1, enc1, crc1 = None, None, None
-            status2, enc2, crc2 = None, None, None
-
+        # stop movement if robot doesn't recieve commands for 1 sec
+        if (
+            self.STOP_MOVEMENT
+            and not self.movement.stopped
+            and self.get_clock().now().nanoseconds
+            - self.movement.last_set_speed_time
+            > 10e9
+        ):
+            self.get_logger().info("Did not get command for 1 second, stopping")
             try:
-                status1, enc1, crc1 = roboclaw.ReadEncM1(self.address)
-            except ValueError:
-                pass
+                roboclaw.ForwardM1(self.address, 0)
+                roboclaw.ForwardM2(self.address, 0)
             except OSError as e:
-                self.get_logger().warn("ReadEncM1 OSError: %d", e.errno)
+                self.get_logger().error("Could not stop")
                 self.get_logger().debug(e)
+            self.movement.stopped = True
 
-            try:
-                status2, enc2, crc2 = roboclaw.ReadEncM2(self.address)
-            except ValueError:
-                pass
-            except OSError as e:
-                self.get_logger().warn("ReadEncM2 OSError: %d", e.errno)
-                self.get_logger().debug(e)
-            self.get_logger().info("Got encoders")
-            if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
-                self.get_logger().debug(" Encoders %d %d" % (enc1, enc2))
-                if self.encodm:
-                    self.encodm.update_publish(enc1, enc2)
-                self.updater.update()
-            self.get_logger().info("Update done moving if cmd")
-            self.movement.run()
+        # TODO need find solution to the OSError11 looks like sync problem with serial
+        status1, enc1, crc1 = None, None, None
+        status2, enc2, crc2 = None, None, None
 
-            r_time.sleep()
+        try:
+            status1, enc1, crc1 = roboclaw.ReadEncM1(self.address)
+        except ValueError:
+            pass
+        except OSError as e:
+            self.get_logger().warn("ReadEncM1 OSError: "+str(e.errno))
+            self.get_logger().debug(e)
+
+        try:
+            status2, enc2, crc2 = roboclaw.ReadEncM2(self.address)
+        except ValueError:
+            pass
+        except OSError as e:
+            self.get_logger().warn("ReadEncM2 OSError: "+str(e.errno))
+            self.get_logger().debug(e)
+        if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
+            self.get_logger().debug(" Encoders "+ str(enc1)+" "+str(enc2))
+            if self.encodm:
+                self.encodm.update_publish(enc1, enc2)
+            self.updater.update()
+        self.get_logger().info("Update done moving if cmd")
+        self.movement.run()
 
     def cmd_vel_callback(self, twist):
-        self.get_logger().info("In cmd_vel callback")
-        self.movement.last_set_speed_time = self.get_clock().now()
+        self.movement.last_set_speed_time = self.get_clock().now().nanoseconds
         self.movement.twist = twist
 
     # TODO: Need to make this work when more than one error is raised
@@ -407,7 +403,7 @@ class RoboclawNode(Node):
         try:
             status = roboclaw.ReadError(self.address)[1]
         except OSError as e:
-            self.get_logger().warn("Diagnostics OSError: %d", e.errno)
+            self.get_logger().warn("Diagnostics OSError: "+str(e.errno))
             self.get_logger().debug(e)
             return
         state, message = self.ERRORS[status]
@@ -424,7 +420,7 @@ class RoboclawNode(Node):
             stat.add("Temp1 C:", str(float(roboclaw.ReadTemp(self.address)[1] / 10)))
             stat.add("Temp2 C:", str(float(roboclaw.ReadTemp2(self.address)[1] / 10)))
         except OSError as e:
-            self.get_logger().warn("Diagnostics OSError: %d", e.errno)
+            self.get_logger().warn("Diagnostics OSError: "+str(e.errno))
             self.get_logger().debug(e)
         return stat
 
@@ -455,8 +451,10 @@ class RoboclawNode(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    with RoboclawNode() as roboclaw_node:
-        roboclaw_node.run()
+    roboclaw_node = RoboclawNode()
+    rclpy.spin(roboclaw_node)
+    roboclaw_node.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":
