@@ -19,7 +19,13 @@ __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
 class EncoderOdom:
     def __init__(
-        self, ticks_per_meter, base_width, parent_clock, parent_odom_pub, parent_logger, parent_node
+        self,
+        ticks_per_meter,
+        base_width,
+        parent_clock,
+        parent_odom_pub,
+        parent_logger,
+        parent_node,
     ):
         self.TICKS_PER_METER = ticks_per_meter
         self.BASE_WIDTH = base_width
@@ -54,7 +60,7 @@ class EncoderOdom:
         dist = (dist_right + dist_left) / 2.0
 
         current_time = self.clock.now().nanoseconds
-        d_time = (current_time - self.last_enc_time)
+        d_time = current_time - self.last_enc_time
         self.last_enc_time = current_time
 
         # TODO find better what to determine going straight, this means slight deviation is accounted
@@ -84,11 +90,17 @@ class EncoderOdom:
         # TODO lets find a better way to deal with this error
         if abs(enc_left - self.last_enc_left) > 20000:
             self.logger.error(
-                "Ignoring left encoder jump: cur "+str(enc_left)+", last "+str(self.last_enc_left)
+                "Ignoring left encoder jump: cur "
+                + str(enc_left)
+                + ", last "
+                + str(self.last_enc_left)
             )
         elif abs(enc_right - self.last_enc_right) > 20000:
             self.logger.error(
-                "Ignoring right encoder jump: cur "+str(enc_right)+", last "+str(self.last_enc_right)
+                "Ignoring right encoder jump: cur "
+                + str(enc_right)
+                + ", last "
+                + str(self.last_enc_right)
             )
         else:
             vel_x, vel_theta = self.update(enc_left, enc_right)
@@ -120,8 +132,7 @@ class EncoderOdom:
         odom.pose.pose.position.x = cur_x
         odom.pose.pose.position.y = cur_y
         odom.pose.pose.position.z = 0.0
-        self.logger.info(str(quat))
-        odom.pose.pose.orientation = Quaternion(quat)
+        odom.pose.pose.orientation = Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
 
         odom.pose.covariance[0] = 0.01
         odom.pose.covariance[7] = 0.01
@@ -132,7 +143,7 @@ class EncoderOdom:
 
         odom.child_frame_id = "base_link"
         odom.twist.twist.linear.x = vx
-        odom.twist.twist.linear.y = 0
+        odom.twist.twist.linear.y = 0.0
         odom.twist.twist.angular.z = vth
         odom.twist.covariance = odom.pose.covariance
 
@@ -181,7 +192,7 @@ class Movement:
         vr_ticks = int(vr * self.TICKS_PER_METER)  # ticks/s
         vl_ticks = int(vl * self.TICKS_PER_METER)
 
-        self.logger.debug("vr_ticks: "+str(vr_ticks)+"vl_ticks: "+str(vl_ticks))
+        self.logger.debug("vr_ticks: " + str(vr_ticks) + "vl_ticks: " + str(vl_ticks))
 
         try:
             # This is a hack way to keep a poorly tuned PID from making noise at speed 0
@@ -203,7 +214,7 @@ class Movement:
                 self.vl_ticks = gain * vl_ticks + (1 - gain) * self.vl_ticks
                 roboclaw.SpeedM1M2(self.address, int(self.vr_ticks), int(self.vl_ticks))
         except OSError as e:
-            self.logger.warn("SpeedM1M2 OSError: "+str(e.errno))
+            self.logger.warn("SpeedM1M2 OSError: " + str(e.errno))
             self.logger.debug(e)
 
 
@@ -247,7 +258,7 @@ class RoboclawNode(Node):
 
         freq = 30
         self.rate = self.create_rate(freq)
-        period = 1/freq
+        period = 1 / freq
         self.timer = self.create_timer(period, self.run)
 
         self.get_logger().info("Connecting to roboclaw")
@@ -325,7 +336,7 @@ class RoboclawNode(Node):
                 self.get_clock(),
                 self.odom_pub,
                 self.get_logger(),
-                self
+                self,
             )
         self.movement = Movement(
             self.address,
@@ -354,8 +365,7 @@ class RoboclawNode(Node):
         if (
             self.STOP_MOVEMENT
             and not self.movement.stopped
-            and self.get_clock().now().nanoseconds
-            - self.movement.last_set_speed_time
+            and self.get_clock().now().nanoseconds - self.movement.last_set_speed_time
             > 10e9
         ):
             self.get_logger().info("Did not get command for 1 second, stopping")
@@ -376,7 +386,7 @@ class RoboclawNode(Node):
         except ValueError:
             pass
         except OSError as e:
-            self.get_logger().warn("ReadEncM1 OSError: "+str(e.errno))
+            self.get_logger().warn("ReadEncM1 OSError: " + str(e.errno))
             self.get_logger().debug(e)
 
         try:
@@ -384,10 +394,10 @@ class RoboclawNode(Node):
         except ValueError:
             pass
         except OSError as e:
-            self.get_logger().warn("ReadEncM2 OSError: "+str(e.errno))
+            self.get_logger().warn("ReadEncM2 OSError: " + str(e.errno))
             self.get_logger().debug(e)
         if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
-            self.get_logger().debug(" Encoders "+ str(enc1)+" "+str(enc2))
+            self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
             if self.encodm:
                 self.encodm.update_publish(enc1, enc2)
             self.updater.update()
@@ -403,7 +413,7 @@ class RoboclawNode(Node):
         try:
             status = roboclaw.ReadError(self.address)[1]
         except OSError as e:
-            self.get_logger().warn("Diagnostics OSError: "+str(e.errno))
+            self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
             self.get_logger().debug(e)
             return
         state, message = self.ERRORS[status]
@@ -420,7 +430,7 @@ class RoboclawNode(Node):
             stat.add("Temp1 C:", str(float(roboclaw.ReadTemp(self.address)[1] / 10)))
             stat.add("Temp2 C:", str(float(roboclaw.ReadTemp2(self.address)[1] / 10)))
         except OSError as e:
-            self.get_logger().warn("Diagnostics OSError: "+str(e.errno))
+            self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
             self.get_logger().debug(e)
         return stat
 
