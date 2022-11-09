@@ -122,8 +122,8 @@ class EncoderOdom:
         t.transform.rotation.y = q[1]
         t.transform.rotation.z = q[2]
         t.transform.rotation.w = q[3]
-        br = tf2_ros.TransformBroadcaster(self.parent_node)
-        br.sendTransform(t)
+        #br = tf2_ros.TransformBroadcaster(self.parent_node)
+        #br.sendTransform(t)
 
         odom = Odometry()
         odom.header.stamp = current_time.to_msg()
@@ -265,16 +265,15 @@ class RoboclawNode(Node):
 
         self.get_logger().info("Connecting to roboclaw")
 
-        self.declare_parameter("~dev", "/dev/ttyACM0")
-        dev_name = self.get_parameter("~dev").get_parameter_value().string_value
+        self.declare_parameter("dev", "/dev/ttyACM0")
+        dev_name = self.get_parameter("dev").get_parameter_value().string_value
+        self.get_logger().info(dev_name)
 
-        self.declare_parameter("~baud", "115200")
-        baud_rate = int(self.get_parameter("~baud").get_parameter_value().string_value)
+        self.declare_parameter("baud", 115200)
+        baud_rate = self.get_parameter("baud").get_parameter_value().integer_value
 
-        self.declare_parameter("~address", "128")
-        self.address = int(
-            self.get_parameter("~address").get_parameter_value().string_value
-        )
+        self.declare_parameter("address", 128)
+        self.address = self.get_parameter("address").get_parameter_value().integer_value
         if self.address > 0x87 or self.address < 0x80:
             self.get_logger().fatal("Address out of range")
             self.shutdown("Address out of range")
@@ -308,26 +307,16 @@ class RoboclawNode(Node):
         roboclaw.SpeedM1M2(self.address, 0, 0)
         roboclaw.ResetEncoders(self.address)
 
-        self.declare_parameter("~max_speed", "2.0")
-        self.MAX_SPEED = float(
-            self.get_parameter("~max_speed").get_parameter_value().string_value
-        )
-        self.declare_parameter("~ticks_per_meter", "4342.2")
-        self.TICKS_PER_METER = float(
-            self.get_parameter("~ticks_per_meter").get_parameter_value().string_value
-        )
-        self.declare_parameter("~base_width", "0.315")
-        self.BASE_WIDTH = float(
-            self.get_parameter("~base_width").get_parameter_value().string_value
-        )
-        self.declare_parameter("~pub_odom", "true")
-        self.PUB_ODOM = bool(
-            self.get_parameter("~pub_odom").get_parameter_value().string_value
-        )
-        self.declare_parameter("~stop_movement", "true")
-        self.STOP_MOVEMENT = bool(
-            self.get_parameter("~stop_movement").get_parameter_value().string_value
-        )
+        self.declare_parameter("max_speed", 2.0)
+        self.MAX_SPEED = self.get_parameter("max_speed").get_parameter_value().double_value
+        self.declare_parameter("ticks_per_meter", 4342.2)
+        self.TICKS_PER_METER = self.get_parameter("ticks_per_meter").get_parameter_value().double_value
+        self.declare_parameter("base_width", 0.315)
+        self.BASE_WIDTH = self.get_parameter("base_width").get_parameter_value().double_value
+        self.declare_parameter("pub_odom", True)
+        self.PUB_ODOM = self.get_parameter("pub_odom").get_parameter_value().bool_value
+        self.declare_parameter("stop_movement", True)
+        self.STOP_MOVEMENT = self.get_parameter("stop_movement").get_parameter_value().bool_value
 
         self.encodm = None
         if self.PUB_ODOM:
@@ -355,12 +344,6 @@ class RoboclawNode(Node):
         )
         self.get_clock().sleep_for(rclpy.duration.Duration(seconds=1.0))
 
-        self.get_logger().debug("dev " + dev_name)
-        self.get_logger().debug("baud " + str(baud_rate))
-        self.get_logger().debug("address " + str(self.address))
-        self.get_logger().debug("max_speed " + str(self.MAX_SPEED))
-        self.get_logger().debug("ticks_per_meter " + str(self.TICKS_PER_METER))
-        self.get_logger().debug("base_width " + str(self.BASE_WIDTH))
 
     def run(self):
         # stop movement if robot doesn't recieve commands for 1 sec
