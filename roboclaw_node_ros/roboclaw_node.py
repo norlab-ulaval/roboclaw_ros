@@ -73,8 +73,8 @@ class EncoderOdom:
         d_time = current_time - self.last_enc_time
         self.last_enc_time = current_time
 
-        self.left_ang_vel = 2 * math.pi * left_ticks / (self.TICKS_PER_ROTATION * d_time)
-        self.right_ang_vel = 2 * math.pi * right_ticks / (self.TICKS_PER_ROTATION * d_time)
+        self.left_ang_vel = 2 * math.pi * left_ticks / (self.TICKS_PER_ROTATION * d_time*1e-9)
+        self.right_ang_vel = 2 * math.pi * right_ticks / (self.TICKS_PER_ROTATION * d_time*1e-9)
 
         # TODO find better what to determine going straight, this means slight deviation is accounted
         if left_ticks == right_ticks:
@@ -92,8 +92,8 @@ class EncoderOdom:
             vel_x = 0.0
             vel_theta = 0.0
         else:
-            vel_x = dist / (d_time * 10e-9)
-            vel_theta = d_theta / (d_time * 10e-9)
+            vel_x = dist / (d_time * 1e-9)
+            vel_theta = d_theta / (d_time * 1e-9)
 
         self.vel_theta = vel_theta
         return vel_x, vel_theta
