@@ -61,9 +61,9 @@ class EncoderOdom:
 
     def update(self, enc_left, enc_right):
         left_ticks = enc_left - self.last_enc_left
-        self.left_ang_vel = left_ticks / (self.TICKS_PER_ROTATION * 2 * math.pi)
+        self.left_ang_vel = 2 * math.pi * left_ticks / (self.TICKS_PER_ROTATION)
         right_ticks = enc_right - self.last_enc_right
-        self.right_ang_vel = right_ticks / (self.TICKS_PER_ROTATION * 2 * math.pi)
+        self.right_ang_vel = 2 * math.pi * right_ticks / (self.TICKS_PER_ROTATION)
         self.last_enc_left = enc_left
         self.last_enc_right = enc_right
 
