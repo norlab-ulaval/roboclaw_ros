@@ -159,7 +159,7 @@ class EncoderOdom:
         odom.twist.covariance = odom.pose.covariance
 
         left_enc = Float64()
-        left_enc.data = self.left_ticks_total
+        left_enc.data = float(self.left_ticks_total)
         right_enc = Float64()
         right_enc.data = self.right_ang_vel
 
