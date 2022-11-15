@@ -341,7 +341,7 @@ class RoboclawNode(Node):
 
         self.encodm = None
         if self.PUB_ODOM:
-            self.odom_pub = self.create_publisher(Odometry, "/odom", 1)
+            self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
             self.encodm = EncoderOdom(
                 self.TICKS_PER_METER,
                 self.TICKS_PER_ROTATION,
