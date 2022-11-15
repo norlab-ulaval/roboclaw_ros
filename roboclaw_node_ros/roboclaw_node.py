@@ -26,6 +26,8 @@ class EncoderOdom:
         base_width,
         parent_clock,
         parent_odom_pub,
+        parent_left_encoder_pub,
+        parent_right_encoder_pub,
         parent_logger,
         parent_node,
     ):
@@ -34,6 +36,8 @@ class EncoderOdom:
         self.BASE_WIDTH = base_width
         self.clock = parent_clock
         self.odom_pub = parent_odom_pub
+        self.left_encoder_pub = parent_left_encoder_pub
+        self.right_encoder_pub = parent_right_encoder_pub
         self.logger = parent_logger
         self.parent_node = parent_node
         self.cur_x = 0
@@ -342,12 +346,16 @@ class RoboclawNode(Node):
         self.encodm = None
         if self.PUB_ODOM:
             self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
+            self.left_encoder_pub = self.create_publisher(Float64, "/left_encoder_angular_velocity", 1)
+            self.right_encoder_pub = self.create_publisher(Float64, "/right_encoder_angular_velocity", 1)
             self.encodm = EncoderOdom(
                 self.TICKS_PER_METER,
                 self.TICKS_PER_ROTATION,
                 self.BASE_WIDTH,
                 self.get_clock(),
                 self.odom_pub,
+                self.left_encoder_pub,
+                self.right_encoder_pub,
                 self.get_logger(),
                 self,
             )
@@ -360,8 +368,6 @@ class RoboclawNode(Node):
             self.get_clock(),
             self.get_logger(),
         )
-        self.left_encoder_pub = self.create_publisher(Float64, "/left_encoder_angular_velocity", 1)
-        self.right_encoder_pub = self.create_publisher(Float64, "/right_encoder_angular_velocity", 1)
         self.last_set_speed_time = self.get_clock().now().nanoseconds
 
         self.cmd_vel_sub = self.create_subscription(
