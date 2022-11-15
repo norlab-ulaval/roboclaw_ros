@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import math
 from math import pi, cos, sin
 
 import diagnostic_msgs
@@ -49,7 +50,6 @@ class EncoderOdom:
         self.vel_theta = 0
         self.left_ang_vel = 0
         self.right_ang_vel = 0
-        self.left_ticks_total = 0
 
     @staticmethod
     def normalize_angle(angle):
@@ -61,10 +61,9 @@ class EncoderOdom:
 
     def update(self, enc_left, enc_right):
         left_ticks = enc_left - self.last_enc_left
-        self.left_ticks_total += left_ticks
-        self.left_ang_vel = left_ticks / self.TICKS_PER_ROTATION
+        self.left_ang_vel = left_ticks / (self.TICKS_PER_ROTATION * 2 * math.pi)
         right_ticks = enc_right - self.last_enc_right
-        self.right_ang_vel = right_ticks / self.TICKS_PER_ROTATION
+        self.right_ang_vel = right_ticks / (self.TICKS_PER_ROTATION * 2 * math.pi)
         self.last_enc_left = enc_left
         self.last_enc_right = enc_right
 
@@ -163,7 +162,7 @@ class EncoderOdom:
         odom.twist.covariance = odom.pose.covariance
 
         left_enc = Float64()
-        left_enc.data = float(self.left_ticks_total)
+        left_enc.data = self.left_ang_vel
         right_enc = Float64()
         right_enc.data = self.right_ang_vel
 
