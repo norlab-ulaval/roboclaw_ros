@@ -61,9 +61,7 @@ class EncoderOdom:
 
     def update(self, enc_left, enc_right):
         left_ticks = enc_left - self.last_enc_left
-        self.left_ang_vel = 2 * math.pi * left_ticks / (self.TICKS_PER_ROTATION)
         right_ticks = enc_right - self.last_enc_right
-        self.right_ang_vel = 2 * math.pi * right_ticks / (self.TICKS_PER_ROTATION)
         self.last_enc_left = enc_left
         self.last_enc_right = enc_right
 
@@ -74,6 +72,9 @@ class EncoderOdom:
         current_time = self.clock.now().nanoseconds
         d_time = current_time - self.last_enc_time
         self.last_enc_time = current_time
+
+        self.left_ang_vel = 2 * math.pi * left_ticks / (self.TICKS_PER_ROTATION * d_time)
+        self.right_ang_vel = 2 * math.pi * right_ticks / (self.TICKS_PER_ROTATION * d_time)
 
         # TODO find better what to determine going straight, this means slight deviation is accounted
         if left_ticks == right_ticks:
