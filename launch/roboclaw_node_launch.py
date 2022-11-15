@@ -16,7 +16,10 @@ def generate_launch_description():
                 {'ticks_per_meter': 3802.4},
                 {'base_width': 0.315},
                 {'pub_odom': False},
-                {'stop_movement': True}
-            ]
+                {'stop_movement': True},
+            ],
+            remappings=[
+            ('/cmd_vel', '/twist_mux/cmd_vel'),
+        ]
         )
     ])
