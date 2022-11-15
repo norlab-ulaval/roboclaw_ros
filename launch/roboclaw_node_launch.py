@@ -14,6 +14,7 @@ def generate_launch_description():
                 {'max_speed': 2.0},
                 #{'~ticks_per_meter': 4342.2},
                 {'ticks_per_meter': 3802.4},
+                {'ticks_per_rotation': 2780},
                 {'base_width': 0.315},
                 {'pub_odom': False},
                 {'stop_movement': True},

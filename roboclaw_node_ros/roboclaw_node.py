@@ -11,6 +11,7 @@ import tf2_py
 from tf_transformations import quaternion_from_euler
 from geometry_msgs.msg import Quaternion, Twist, TransformStamped
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float64
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
@@ -21,6 +22,7 @@ class EncoderOdom:
     def __init__(
         self,
         ticks_per_meter,
+        ticks_per_rotation,
         base_width,
         parent_clock,
         parent_odom_pub,
@@ -28,6 +30,7 @@ class EncoderOdom:
         parent_node,
     ):
         self.TICKS_PER_METER = ticks_per_meter
+        self.TICKS_PER_ROTATION = ticks_per_rotation
         self.BASE_WIDTH = base_width
         self.clock = parent_clock
         self.odom_pub = parent_odom_pub
@@ -40,6 +43,9 @@ class EncoderOdom:
         self.last_enc_right = 0
         self.last_enc_time = self.clock.now().nanoseconds
         self.vel_theta = 0
+        self.left_ang_vel = 0
+        self.right_ang_vel = 0
+        self.left_ticks_total = 0
 
     @staticmethod
     def normalize_angle(angle):
@@ -51,7 +57,10 @@ class EncoderOdom:
 
     def update(self, enc_left, enc_right):
         left_ticks = enc_left - self.last_enc_left
+        self.left_ticks_total += left_ticks
+        self.left_ang_vel = left_ticks / self.TICKS_PER_ROTATION
         right_ticks = enc_right - self.last_enc_right
+        self.right_ang_vel = right_ticks / self.TICKS_PER_ROTATION
         self.last_enc_left = enc_left
         self.last_enc_right = enc_right
 
@@ -149,7 +158,15 @@ class EncoderOdom:
         odom.twist.twist.angular.z = vth
         odom.twist.covariance = odom.pose.covariance
 
+        left_enc = Float64()
+        left_enc.data = self.left_ticks_total
+        right_enc = Float64()
+        right_enc.data = self.right_ang_vel
+
         self.odom_pub.publish(odom)
+
+        self.left_encoder_pub.publish(left_enc)
+        self.right_encoder_pub.publish(right_enc)
 
 
 class Movement:
@@ -159,6 +176,7 @@ class Movement:
         max_speed,
         base_width,
         ticks_per_meter,
+        ticks_per_rotation,
         parent_clock,
         parent_logger,
     ):
@@ -167,6 +185,7 @@ class Movement:
         self.MAX_SPEED = max_speed
         self.BASE_WIDTH = base_width
         self.TICKS_PER_METER = ticks_per_meter
+        self.TICKS_PER_ROTATION = ticks_per_rotation
         self.clock = parent_clock
         self.logger = parent_logger
         self.last_set_speed_time = self.clock.now().nanoseconds
@@ -311,6 +330,8 @@ class RoboclawNode(Node):
         self.MAX_SPEED = self.get_parameter("max_speed").get_parameter_value().double_value
         self.declare_parameter("ticks_per_meter", 4342.2)
         self.TICKS_PER_METER = self.get_parameter("ticks_per_meter").get_parameter_value().double_value
+        self.declare_parameter("ticks_per_rotation", 2780)
+        self.TICKS_PER_ROTATION = self.get_parameter("ticks_per_rotation").get_parameter_value().double_value
         self.declare_parameter("base_width", 0.315)
         self.BASE_WIDTH = self.get_parameter("base_width").get_parameter_value().double_value
         self.declare_parameter("pub_odom", True)
@@ -337,6 +358,8 @@ class RoboclawNode(Node):
             self.get_clock(),
             self.get_logger(),
         )
+        self.left_encoder_pub = self.create_publisher(Float64, "/left_encoder_angular_velocity", 1)
+        self.right_encoder_pub = self.create_publisher(Float64, "/right_encoder_angular_velocity", 1)
         self.last_set_speed_time = self.get_clock().now().nanoseconds
 
         self.cmd_vel_sub = self.create_subscription(
