@@ -331,7 +331,7 @@ class RoboclawNode(Node):
         self.declare_parameter("ticks_per_meter", 4342.2)
         self.TICKS_PER_METER = self.get_parameter("ticks_per_meter").get_parameter_value().double_value
         self.declare_parameter("ticks_per_rotation", 2780)
-        self.TICKS_PER_ROTATION = self.get_parameter("ticks_per_rotation").get_parameter_value().double_value
+        self.TICKS_PER_ROTATION = self.get_parameter("ticks_per_rotation").get_parameter_value().integer_value
         self.declare_parameter("base_width", 0.315)
         self.BASE_WIDTH = self.get_parameter("base_width").get_parameter_value().double_value
         self.declare_parameter("pub_odom", True)
