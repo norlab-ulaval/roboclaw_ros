@@ -415,7 +415,9 @@ class RoboclawNode(Node):
         if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
             self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
             if self.encodm:
-                self.encodm.update_publish(enc1, enc2)
+                # self.encodm.update_publish(enc1, enc2)
+                ## Left motor encoder = m2 / Right motor encoder = m1
+                self.encodm.update_publish(enc2, enc1)
             self.updater.update()
         self.get_logger().info("Update done moving if cmd")
         self.movement.run()
