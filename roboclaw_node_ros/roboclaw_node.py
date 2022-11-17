@@ -25,11 +25,6 @@ class EncoderOdom:
         ticks_per_meter,
         ticks_per_rotation,
         base_width,
-        parent_clock,
-        parent_odom_pub,
-        parent_left_encoder_pub,
-        parent_right_encoder_pub,
-        parent_logger,
         parent_node,
     ):
         """Encoder Odometry
@@ -38,22 +33,20 @@ class EncoderOdom:
             ticks_per_meter (float): Ticks per meter, according to the ROS parameters
             ticks_per_rotation (float): Ticks per wheel rotation, according to the ROS parameters
             base_width (float): Base width (baseline) of the robot
-            parent_clock (rclpy.time.Clock): RCL Node clock
-            parent_odom_pub (rclpy.publisher.Publisher): RCL Node Odometry Publisher
-            parent_left_encoder_pub (rclpy.publisher.Publisher): RCL Node Left Encoder Publisher
-            parent_right_encoder_pub (rclpy.publisher.Publisher): RCL Node Right Encoder Publisher
-            parent_logger (rclpy.): RCL Node Logger
             parent_node (rclpy.node.Node): RCL Node
         """
         self.TICKS_PER_METER = ticks_per_meter
         self.TICKS_PER_ROTATION = ticks_per_rotation
         self.BASE_WIDTH = base_width
-        self.clock = parent_clock
-        self.odom_pub = parent_odom_pub
-        self.left_encoder_pub = parent_left_encoder_pub
-        self.right_encoder_pub = parent_right_encoder_pub
-        self.logger = parent_logger
+        # Node parameters
         self.parent_node = parent_node
+        self.clock = self.parent_node.get_clock()
+        self.logger = self.parent_node.get_logger()
+        # Odometry, left and right encoders publishers
+        self.odom_pub = self.parent_node.odom_pub
+        self.left_encoder_pub = self.parent_node.left_encoder_pub
+        self.right_encoder_pub = self.parent_node.right_encoder_pub
+        # Odometry data
         self.cur_x = 0
         self.cur_y = 0
         self.cur_theta = 0.0
@@ -192,6 +185,9 @@ class EncoderOdom:
 
 
 class Movement:
+    """Movement class - responsible of running the RoboClaw and
+    """
+
     def __init__(
         self,
         address,
@@ -388,11 +384,6 @@ class RoboclawNode(Node):
                 self.TICKS_PER_METER,
                 self.TICKS_PER_ROTATION,
                 self.BASE_WIDTH,
-                self.get_clock(),
-                self.odom_pub,
-                self.left_encoder_pub,
-                self.right_encoder_pub,
-                self.get_logger(),
                 self,
             )
         self.movement = Movement(
