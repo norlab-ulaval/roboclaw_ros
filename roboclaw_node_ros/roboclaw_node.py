@@ -32,6 +32,19 @@ class EncoderOdom:
         parent_logger,
         parent_node,
     ):
+        """Encoder Odometry
+
+        Args:
+            ticks_per_meter (float): Ticks per meter, according to the ROS parameters
+            ticks_per_rotation (float): Ticks per wheel rotation, according to the ROS parameters
+            base_width (float): Base width (baseline) of the robot
+            parent_clock (rclpy.time.Clock): RCL Node clock
+            parent_odom_pub (rclpy.publisher.Publisher): RCL Node Odometry Publisher
+            parent_left_encoder_pub (rclpy.publisher.Publisher): RCL Node Left Encoder Publisher
+            parent_right_encoder_pub (rclpy.publisher.Publisher): RCL Node Right Encoder Publisher
+            parent_logger (rclpy.): RCL Node Logger
+            parent_node (rclpy.node.Node): RCL Node
+        """
         self.TICKS_PER_METER = ticks_per_meter
         self.TICKS_PER_ROTATION = ticks_per_rotation
         self.BASE_WIDTH = base_width
@@ -73,8 +86,10 @@ class EncoderOdom:
         d_time = current_time - self.last_enc_time
         self.last_enc_time = current_time
 
-        self.left_ang_vel = 2 * math.pi * left_ticks / (self.TICKS_PER_ROTATION * d_time*1e-9)
-        self.right_ang_vel = 2 * math.pi * right_ticks / (self.TICKS_PER_ROTATION * d_time*1e-9)
+        self.left_ang_vel = 2 * math.pi * left_ticks / \
+            (self.TICKS_PER_ROTATION * d_time*1e-9)
+        self.right_ang_vel = 2 * math.pi * right_ticks / \
+            (self.TICKS_PER_ROTATION * d_time*1e-9)
 
         # TODO find better what to determine going straight, this means slight deviation is accounted
         if left_ticks == right_ticks:
@@ -84,8 +99,10 @@ class EncoderOdom:
         else:
             d_theta = (dist_right - dist_left) / self.BASE_WIDTH
             r = dist / d_theta
-            self.cur_x += r * (sin(d_theta + self.cur_theta) - sin(self.cur_theta))
-            self.cur_y -= r * (cos(d_theta + self.cur_theta) - cos(self.cur_theta))
+            self.cur_x += r * \
+                (sin(d_theta + self.cur_theta) - sin(self.cur_theta))
+            self.cur_y -= r * \
+                (cos(d_theta + self.cur_theta) - cos(self.cur_theta))
             self.cur_theta = self.normalize_angle(self.cur_theta + d_theta)
 
         if abs(d_time) < 1000:
@@ -117,7 +134,8 @@ class EncoderOdom:
             )
         else:
             vel_x, vel_theta = self.update(enc_left, enc_right)
-            self.publish_odom(self.cur_x, self.cur_y, self.cur_theta, vel_x, vel_theta)
+            self.publish_odom(self.cur_x, self.cur_y,
+                              self.cur_theta, vel_x, vel_theta)
 
     def publish_odom(self, cur_x, cur_y, cur_theta, vx, vth):
         quat = quaternion_from_euler(0, 0, cur_theta)
@@ -135,8 +153,8 @@ class EncoderOdom:
         t.transform.rotation.y = q[1]
         t.transform.rotation.z = q[2]
         t.transform.rotation.w = q[3]
-        #br = tf2_ros.TransformBroadcaster(self.parent_node)
-        #br.sendTransform(t)
+        # br = tf2_ros.TransformBroadcaster(self.parent_node)
+        # br.sendTransform(t)
 
         odom = Odometry()
         odom.header.stamp = current_time.to_msg()
@@ -217,7 +235,8 @@ class Movement:
         vr_ticks = int(vr * self.TICKS_PER_METER)  # ticks/s
         vl_ticks = int(vl * self.TICKS_PER_METER)
 
-        self.logger.debug("vr_ticks: " + str(vr_ticks) + "vl_ticks: " + str(vl_ticks))
+        self.logger.debug("vr_ticks: " + str(vr_ticks) +
+                          "vl_ticks: " + str(vl_ticks))
 
         try:
             # This is a hack way to keep a poorly tuned PID from making noise at speed 0
@@ -237,13 +256,16 @@ class Movement:
                 gain = 0.5
                 self.vr_ticks = gain * vr_ticks + (1 - gain) * self.vr_ticks
                 self.vl_ticks = gain * vl_ticks + (1 - gain) * self.vl_ticks
-                roboclaw.SpeedM1M2(self.address, int(self.vr_ticks), int(self.vl_ticks))
+                roboclaw.SpeedM1M2(self.address, int(
+                    self.vr_ticks), int(self.vl_ticks))
         except OSError as e:
             self.logger.warn("SpeedM1M2 OSError: " + str(e.errno))
             self.logger.debug(e)
 
 
 class RoboclawNode(Node):
+    """RoboClaw Node"""
+
     def __init__(self):
         super().__init__("roboclaw_node")
         self.ERRORS = {
@@ -265,8 +287,10 @@ class RoboclawNode(Node):
                 diagnostic_msgs.msg.DiagnosticStatus.ERROR,
                 "Logic batt voltage low",
             ),
-            0x0100: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M1 driver fault"),
-            0x0200: (diagnostic_msgs.msg.DiagnosticStatus.WARN, "M2 driver fault"),
+            0x0100: (diagnostic_msgs.msg.DiagnosticStatus.WARN,
+                     "M1 driver fault"),
+            0x0200: (diagnostic_msgs.msg.DiagnosticStatus.WARN,
+                     "M2 driver fault"),
             0x0400: (
                 diagnostic_msgs.msg.DiagnosticStatus.WARN,
                 "Main batt voltage high",
@@ -293,10 +317,12 @@ class RoboclawNode(Node):
         self.get_logger().info(dev_name)
 
         self.declare_parameter("baud", 115200)
-        baud_rate = self.get_parameter("baud").get_parameter_value().integer_value
+        baud_rate = self.get_parameter(
+            "baud").get_parameter_value().integer_value
 
         self.declare_parameter("address", 128)
-        self.address = self.get_parameter("address").get_parameter_value().integer_value
+        self.address = self.get_parameter(
+            "address").get_parameter_value().integer_value
         if self.address > 0x87 or self.address < 0x80:
             self.get_logger().fatal("Address out of range")
             self.shutdown("Address out of range")
@@ -312,7 +338,8 @@ class RoboclawNode(Node):
         self.updater = diagnostic_updater.Updater(self)
         self.updater.setHardwareID("Roboclaw")
         self.updater.add(
-            diagnostic_updater.FunctionDiagnosticTask("Vitals", self.check_vitals)
+            diagnostic_updater.FunctionDiagnosticTask(
+                "Vitals", self.check_vitals)
         )
 
         try:
@@ -331,23 +358,32 @@ class RoboclawNode(Node):
         roboclaw.ResetEncoders(self.address)
 
         self.declare_parameter("max_speed", 2.0)
-        self.MAX_SPEED = self.get_parameter("max_speed").get_parameter_value().double_value
+        self.MAX_SPEED = self.get_parameter(
+            "max_speed").get_parameter_value().double_value
         self.declare_parameter("ticks_per_meter", 4342.2)
-        self.TICKS_PER_METER = self.get_parameter("ticks_per_meter").get_parameter_value().double_value
+        self.TICKS_PER_METER = self.get_parameter(
+            "ticks_per_meter").get_parameter_value().double_value
         self.declare_parameter("ticks_per_rotation", 2780)
-        self.TICKS_PER_ROTATION = self.get_parameter("ticks_per_rotation").get_parameter_value().integer_value
+        self.TICKS_PER_ROTATION = self.get_parameter(
+            "ticks_per_rotation").get_parameter_value().integer_value
         self.declare_parameter("base_width", 0.315)
-        self.BASE_WIDTH = self.get_parameter("base_width").get_parameter_value().double_value
+        self.BASE_WIDTH = self.get_parameter(
+            "base_width").get_parameter_value().double_value
         self.declare_parameter("pub_odom", True)
-        self.PUB_ODOM = self.get_parameter("pub_odom").get_parameter_value().bool_value
+        self.PUB_ODOM = self.get_parameter(
+            "pub_odom").get_parameter_value().bool_value
         self.declare_parameter("stop_movement", True)
-        self.STOP_MOVEMENT = self.get_parameter("stop_movement").get_parameter_value().bool_value
+        self.STOP_MOVEMENT = self.get_parameter(
+            "stop_movement").get_parameter_value().bool_value
 
         self.encodm = None
         if self.PUB_ODOM:
-            self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
-            self.left_encoder_pub = self.create_publisher(Float64, "/left_encoder_angular_velocity", 1)
-            self.right_encoder_pub = self.create_publisher(Float64, "/right_encoder_angular_velocity", 1)
+            self.odom_pub = self.create_publisher(
+                Odometry, "/odom_roboclaw", 1)
+            self.left_encoder_pub = self.create_publisher(
+                Float64, "/left_encoder_angular_velocity", 1)
+            self.right_encoder_pub = self.create_publisher(
+                Float64, "/right_encoder_angular_velocity", 1)
             self.encodm = EncoderOdom(
                 self.TICKS_PER_METER,
                 self.TICKS_PER_ROTATION,
@@ -374,7 +410,6 @@ class RoboclawNode(Node):
             Twist, "/cmd_vel", self.cmd_vel_callback, 1
         )
         self.get_clock().sleep_for(rclpy.duration.Duration(seconds=1.0))
-
 
     def run(self):
         # stop movement if robot doesn't recieve commands for 1 sec
@@ -416,7 +451,7 @@ class RoboclawNode(Node):
             self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
             if self.encodm:
                 # self.encodm.update_publish(enc1, enc2)
-                ## Left motor encoder = m2 / Right motor encoder = m1
+                # Left motor encoder = m2 / Right motor encoder = m1
                 self.encodm.update_publish(enc2, enc1)
             self.updater.update()
         self.get_logger().info("Update done moving if cmd")
@@ -439,14 +474,18 @@ class RoboclawNode(Node):
         try:
             stat.add(
                 "Main Batt V:",
-                str(float(roboclaw.ReadMainBatteryVoltage(self.address)[1] / 10)),
+                str(float(roboclaw.ReadMainBatteryVoltage(
+                    self.address)[1] / 10)),
             )
             stat.add(
                 "Logic Batt V:",
-                str(float(roboclaw.ReadLogicBatteryVoltage(self.address)[1] / 10)),
+                str(float(roboclaw.ReadLogicBatteryVoltage(
+                    self.address)[1] / 10)),
             )
-            stat.add("Temp1 C:", str(float(roboclaw.ReadTemp(self.address)[1] / 10)))
-            stat.add("Temp2 C:", str(float(roboclaw.ReadTemp2(self.address)[1] / 10)))
+            stat.add("Temp1 C:", str(
+                float(roboclaw.ReadTemp(self.address)[1] / 10)))
+            stat.add("Temp2 C:", str(
+                float(roboclaw.ReadTemp2(self.address)[1] / 10)))
         except OSError as e:
             self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
             self.get_logger().debug(e)
