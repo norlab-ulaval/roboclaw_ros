@@ -1,25 +1,29 @@
 #!/usr/bin/env python
 import math
-from math import pi, cos, sin
+from math import cos, pi, sin
 
 import diagnostic_msgs
 import diagnostic_updater
-from . import roboclaw_driver as roboclaw
 import rclpy
-from rclpy.node import Node
-import tf2_ros
 import tf2_py
-from tf_transformations import quaternion_from_euler
-from geometry_msgs.msg import Quaternion, Twist, TransformStamped
+import tf2_ros
+from geometry_msgs.msg import Quaternion, TransformStamped, Twist
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import BatteryState
+from rclpy.node import Node
+from rclpy.time import Time
 from std_msgs.msg import Float64
+from tf_transformations import quaternion_from_euler
+
+from . import roboclaw_driver as roboclaw
+from . import utils as u
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
 # TODO need to find some better was of handling OSerror 11 or preventing it, any ideas?
 
 
-class EncoderOdom:
+class EncoderOdomElec:
     def __init__(
         self,
         ticks_per_meter,
@@ -27,7 +31,7 @@ class EncoderOdom:
         base_width,
         parent_node,
     ):
-        """Encoder Odometry
+        """Encoder Odometry + Electrical
 
         Args:
             ticks_per_meter (float): Ticks per meter, according to the ROS parameters
@@ -56,6 +60,9 @@ class EncoderOdom:
         self.vel_theta = 0
         self.left_ang_vel = 0
         self.right_ang_vel = 0
+        # Electricity publishers
+        # self. = self.p
+        # Electrical data
 
     @staticmethod
     def normalize_angle(angle):
@@ -90,6 +97,7 @@ class EncoderOdom:
             self.cur_x += dist * cos(self.cur_theta)
             self.cur_y += dist * sin(self.cur_theta)
         else:
+            # delta theta
             d_theta = (dist_right - dist_left) / self.BASE_WIDTH
             r = dist / d_theta
             self.cur_x += r * \
@@ -108,7 +116,7 @@ class EncoderOdom:
         self.vel_theta = vel_theta
         return vel_x, vel_theta
 
-    def update_publish(self, enc_left, enc_right):
+    def update_publish(self, enc_left, enc_right, motor_data):
         # 2106 per 0.1 seconds is max speed, error in the 16th bit is 32768
         # TODO lets find a better way to deal with this error
         if abs(enc_left - self.last_enc_left) > 20000:
@@ -118,6 +126,7 @@ class EncoderOdom:
                 + ", last "
                 + str(self.last_enc_left)
             )
+            return
         elif abs(enc_right - self.last_enc_right) > 20000:
             self.logger.error(
                 "Ignoring right encoder jump: cur "
@@ -125,17 +134,29 @@ class EncoderOdom:
                 + ", last "
                 + str(self.last_enc_right)
             )
-        else:
-            vel_x, vel_theta = self.update(enc_left, enc_right)
-            self.publish_odom(self.cur_x, self.cur_y,
-                              self.cur_theta, vel_x, vel_theta)
+            return
 
-    def publish_odom(self, cur_x, cur_y, cur_theta, vx, vth):
+        vel_x, vel_theta = self.update(enc_left, enc_right)
+        publish_time = self.clock.now()
+        self.publish_odom(self.cur_x, self.cur_y,
+                          self.cur_theta, publish_time, vel_x, vel_theta)
+        self.publish_elec(publish_time, )
+
+    def publish_odom(self, cur_x: float, cur_y: float, cur_theta: float, cur_time: Time,  vx: float, vth: float):
+        """Publish odometry
+
+        Args:
+            cur_x (float): Current x coordinate
+            cur_y (float): Current y coordinate
+            cur_theta (float): Current theta heading
+            cur_time (Time): Current theta heading
+            vx (float): Linear speed - forward
+            vth (float): angular speed => delta theta / time
+        """
         quat = quaternion_from_euler(0, 0, cur_theta)
-        current_time = self.clock.now()
 
         t = TransformStamped()
-        t.header.stamp = current_time.to_msg()
+        t.header.stamp = cur_time.to_msg()
         t.header.frame_id = "base_link"
         t.child_frame_id = "odom"
         t.transform.translation.x = cur_x
@@ -150,7 +171,7 @@ class EncoderOdom:
         # br.sendTransform(t)
 
         odom = Odometry()
-        odom.header.stamp = current_time.to_msg()
+        odom.header.stamp = cur_time.to_msg()
         odom.header.frame_id = "odom"
 
         odom.pose.pose.position.x = cur_x
@@ -182,6 +203,12 @@ class EncoderOdom:
 
         self.left_encoder_pub.publish(left_enc)
         self.right_encoder_pub.publish(right_enc)
+
+    def publish_elec(self, publish_time: Time):
+        b = BatteryState()
+        b.header.stamp = publish_time.to_msg()
+        b.header.frame_id = "base_link"
+        pass
 
 
 class Movement:
@@ -380,7 +407,7 @@ class RoboclawNode(Node):
                 Float64, "/left_encoder_angular_velocity", 1)
             self.right_encoder_pub = self.create_publisher(
                 Float64, "/right_encoder_angular_velocity", 1)
-            self.encodm = EncoderOdom(
+            self.encodm = EncoderOdomElec(
                 self.TICKS_PER_METER,
                 self.TICKS_PER_ROTATION,
                 self.BASE_WIDTH,
@@ -441,9 +468,9 @@ class RoboclawNode(Node):
         if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
             self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
             if self.encodm:
-                # self.encodm.update_publish(enc1, enc2)
-                # Left motor encoder = m2 / Right motor encoder = m1
+                # Left motor encoder : M2 / Right motor encoder : M1
                 self.encodm.update_publish(enc2, enc1)
+                # self.encodm.update_publish(enc1, enc2)
             self.updater.update()
         self.get_logger().info("Update done moving if cmd")
         self.movement.run()
