@@ -60,8 +60,10 @@ class EncoderOdomElec:
         self.left_ang_vel = 0
         self.right_ang_vel = 0
         # Electricity publishers
-        # self. = self.p
+        self.left_elec_pub = self.parent_node.left_elec_pub
+        self.right_elec_pub = self.parent_node.right_elec_pub
         # Electrical data
+        self.motor_elec = {}
 
     @staticmethod
     def normalize_angle(angle):
@@ -115,7 +117,14 @@ class EncoderOdomElec:
         self.vel_theta = vel_theta
         return vel_x, vel_theta
 
-    def update_publish(self, enc_left, enc_right, motor_data):
+    def update_n_publish(self, enc_left: float, enc_right: float, elec_data: dict):
+        """Update odom and elec and publish all data accordingly
+
+        Args:
+            enc_left: Left Encoder Measurement
+            enc_right: Right Encoder Measurement
+            elec_data: Electrical data from the RoboClaw
+        """
         # 2106 per 0.1 seconds is max speed, error in the 16th bit is 32768
         # TODO lets find a better way to deal with this error
         if abs(enc_left - self.last_enc_left) > 20000:
@@ -139,7 +148,7 @@ class EncoderOdomElec:
         publish_time = self.clock.now()
         self.publish_odom(self.cur_x, self.cur_y,
                           self.cur_theta, publish_time, vel_x, vel_theta)
-        self.publish_elec(publish_time, )
+        self.publish_elec(publish_time, elec_data)
 
     def publish_odom(self, cur_x: float, cur_y: float, cur_theta: float, cur_time: Time,  vx: float, vth: float):
         """Publish odometry
@@ -204,10 +213,17 @@ class EncoderOdomElec:
         self.right_encoder_pub.publish(right_enc)
 
     def publish_elec(self, publish_time: Time):
-        b = BatteryState()
-        b.header.stamp = publish_time.to_msg()
-        b.header.frame_id = "base_link"
-        pass
+        # Publish elec in two battery states
+        bl = BatteryState()
+        bl.header.stamp = publish_time.to_msg()
+        bl.header.frame_id = "base_link"
+
+        br = BatteryState()
+        br.header.stamp = publish_time.to_msg()
+        br.header.frame_id = "base_link"
+
+        self.left_elec_pub.publish(bl)
+        self.right_elec_pub.publish(br)
 
 
 class Movement:
@@ -318,12 +334,12 @@ class RoboclawNode(Node):
         try:
             roboclaw.Open(dev_name, baud_rate)
         except Exception as e:
-            self.get_logger().fatal("Could not connect to Roboclaw")
+            self.get_logger().fatal("Could not connect to RoboClaw")
             self.get_logger().debug(e)
-            self.shutdown("Could not connect to Roboclaw")
+            self.shutdown("Could not connect to RoboClaw")
 
         self.updater = diagnostic_updater.Updater(self)
-        self.updater.setHardwareID("Roboclaw")
+        self.updater.setHardwareID("RoboClaw")
         self.updater.add(
             diagnostic_updater.FunctionDiagnosticTask(
                 "Vitals", self.check_vitals)
@@ -332,12 +348,12 @@ class RoboclawNode(Node):
         try:
             version = roboclaw.ReadVersion(self.address)
         except Exception as e:
-            self.get_logger().warn("Problem getting roboclaw version")
+            self.get_logger().warn("Problem getting RoboClaw version")
             self.get_logger().warn(e)
             pass
 
         if not version[0]:
-            self.get_logger().warn("Could not get version from roboclaw")
+            self.get_logger().warn("Could not get version from RoboClaw")
         else:
             self.get_logger().debug(repr(version[1]))
 
@@ -371,6 +387,10 @@ class RoboclawNode(Node):
                 Float64, "/left_encoder_angular_velocity", 1)
             self.right_encoder_pub = self.create_publisher(
                 Float64, "/right_encoder_angular_velocity", 1)
+            self.left_elec_pub = self.create_publisher(
+                BatteryState, "/roboclaw/elec/left", 1)
+            self.right_elec_pub = self.create_publisher(
+                BatteryState, "/roboclaw/elec/right", 1)
             self.encodm = EncoderOdomElec(
                 self.TICKS_PER_METER,
                 self.TICKS_PER_ROTATION,
@@ -411,6 +431,7 @@ class RoboclawNode(Node):
             self.movement.stopped = True
 
         # TODO need find solution to the OSError11 looks like sync problem with serial
+        # Read encoders
         status1, enc1, crc1 = None, None, None
         status2, enc2, crc2 = None, None, None
 
@@ -429,15 +450,48 @@ class RoboclawNode(Node):
         except OSError as e:
             self.get_logger().warn("ReadEncM2 OSError: " + str(e.errno))
             self.get_logger().debug(e)
-        if ("enc1" in vars()) and ("enc2" in vars() and enc1 and enc2):
+
+        # Read Motors Elec
+        elec_data = {}
+
+        status, *currents = roboclaw.ReadCurrents(self.address)
+        self.log_elec(status, "currents")
+        elec_data["current"] = {sd: curr / 100 for sd,
+                                curr in zip(("left", "right"), currents)}
+
+        status, *voltages = roboclaw.ReadMainBatteryVoltage(self.address)
+        self.log_elec(status, "voltages")
+        elec_data["voltage"] = {sd: volt / 10 for sd,
+                                volt in zip(("left", "right"), voltages)}
+
+        status, *pwms = roboclaw.ReadPWMs(self.address)
+        self.log_elec(status, "PWMs")
+        elec_data["pwm"] = {sd: pwm / 327.67 for sd,
+                            pwm in zip(("left", "right"), pwms)}
+
+        status, temperature = roboclaw.ReadTemp(self.address)
+        self.log_elec(status, "temperature")
+        elec_data["temp"] = temperature / 10
+
+        has_enc1 = "enc1" in vars()
+        has_enc2 = "enc2" in vars()
+        has_encoders = has_enc1 and has_enc2 and enc1 and enc2
+
+        if has_encoders:
             self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
             if self.encodm:
                 # Left motor encoder : M2 / Right motor encoder : M1
-                self.encodm.update_publish(enc2, enc1)
-                # self.encodm.update_publish(enc1, enc2)
+                self.encodm.update_n_publish(enc2, enc1, elec_data)
+                # self.encodm.update_n_publish(enc1, enc2)
             self.updater.update()
         self.get_logger().info("Update done moving if cmd")
         self.movement.run()
+
+    def log_elec(self, status: int, name: str):
+        if status:
+            self.get_logger().info(f"Got {name.lower()} data")
+        else:
+            self.get_logger().info(f"Missing {name.lower()}")
 
     def cmd_vel_callback(self, twist):
         self.movement.last_set_speed_time = self.get_clock().now().nanoseconds

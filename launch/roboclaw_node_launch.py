@@ -1,5 +1,7 @@
-from launch import LaunchDescription
 from launch_ros.actions import Node
+
+from launch import LaunchDescription
+
 
 def generate_launch_description():
     return LaunchDescription([
@@ -20,7 +22,7 @@ def generate_launch_description():
                 {'stop_movement': True},
             ],
             remappings=[
-            ('/cmd_vel', '/twist_mux/cmd_vel'),
-        ]
+                ('/cmd_vel', '/twist_mux/cmd_vel'),
+            ]
         )
     ])
