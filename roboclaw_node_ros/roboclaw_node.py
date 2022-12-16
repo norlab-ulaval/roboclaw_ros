@@ -212,18 +212,37 @@ class EncoderOdomElec:
         self.left_encoder_pub.publish(left_enc)
         self.right_encoder_pub.publish(right_enc)
 
-    def publish_elec(self, publish_time: Time):
-        # Publish elec in two battery states
-        bl = BatteryState()
-        bl.header.stamp = publish_time.to_msg()
-        bl.header.frame_id = "base_link"
+    def publish_elec(self, publish_time: Time, elec_data: dict):
+        """Publish elec in two battery states
 
-        br = BatteryState()
-        br.header.stamp = publish_time.to_msg()
-        br.header.frame_id = "base_link"
+        Main Battery Voltage => voltage
+        Current => current
+        Logic Battery Voltage => charge
+        PWM => percentage
+        Temperature => temperature
+        """
 
-        self.left_elec_pub.publish(bl)
-        self.right_elec_pub.publish(br)
+        side = "left"
+        bs = BatteryState()
+        bs.header.stamp = publish_time.to_msg()
+        bs.header.frame_id = "base_link"
+        bs.voltage = elec_data["voltage"][side]
+        bs.current = elec_data["current"][side]
+        bs.percentage = elec_data["pwm"][side]
+        bs.charge = elec_data["logicbatt"][side]
+        bs.temperature = elec_data["temperature"]
+        self.left_elec_pub.publish(bs)
+
+        side = "right"
+        bs = BatteryState()
+        bs.header.stamp = publish_time.to_msg()
+        bs.header.frame_id = "base_link"
+        bs.voltage = elec_data["voltage"][side]
+        bs.current = elec_data["current"][side]
+        bs.percentage = elec_data["pwm"][side]
+        bs.charge = elec_data["logicbatt"][side]
+        bs.temperature = elec_data["temperature"]
+        self.right_elec_pub.publish(bs)
 
 
 class Movement:
@@ -464,6 +483,11 @@ class RoboclawNode(Node):
         elec_data["voltage"] = {sd: volt / 10 for sd,
                                 volt in zip(("left", "right"), voltages)}
 
+        status, *logicbatts = roboclaw.ReadLogicBatteryVoltage(self.address)
+        self.log_elec(status, "logic voltages")
+        elec_data["logicbatt"] = {sd: volt / 10 for sd,
+                                  volt in zip(("left", "right"), logicbatts)}
+
         status, *pwms = roboclaw.ReadPWMs(self.address)
         self.log_elec(status, "PWMs")
         elec_data["pwm"] = {sd: pwm / 327.67 for sd,
@@ -471,7 +495,7 @@ class RoboclawNode(Node):
 
         status, temperature = roboclaw.ReadTemp(self.address)
         self.log_elec(status, "temperature")
-        elec_data["temp"] = temperature / 10
+        elec_data["temperature"] = temperature / 10
 
         has_enc1 = "enc1" in vars()
         has_enc2 = "enc2" in vars()
@@ -542,13 +566,13 @@ class RoboclawNode(Node):
                 self.get_logger().error("Could not shutdown motors!!!!")
                 self.get_logger().debug(e)
 
-    def __enter__(self):
-        return self
+    # def __enter__(self):
+    #     return self
 
-    def __exit__(self, exc_type, exc_value, tb):
-        self.shutdown(str(exc_value))
-        self.destroy_node()
-        rclpy.shutdown()
+    # def __exit__(self, exc_type, exc_value, tb):
+    #     self.shutdown(str(exc_value))
+    #     self.destroy_node()
+    #     rclpy.shutdown()
 
 
 def main(args=None):
