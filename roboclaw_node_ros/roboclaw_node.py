@@ -226,10 +226,10 @@ class EncoderOdomElec:
         bs = BatteryState()
         bs.header.stamp = publish_time.to_msg()
         bs.header.frame_id = "base_link"
-        bs.voltage = elec_data["voltage"][side]
+        bs.voltage = elec_data["voltage"]
         bs.current = elec_data["current"][side]
         bs.percentage = elec_data["pwm"][side]
-        bs.charge = elec_data["logicbatt"][side]
+        bs.charge = elec_data["logicbatt"]
         bs.temperature = elec_data["temperature"]
         self.left_elec_pub.publish(bs)
 
@@ -237,10 +237,10 @@ class EncoderOdomElec:
         bs = BatteryState()
         bs.header.stamp = publish_time.to_msg()
         bs.header.frame_id = "base_link"
-        bs.voltage = elec_data["voltage"][side]
+        bs.voltage = elec_data["voltage"]
         bs.current = elec_data["current"][side]
         bs.percentage = elec_data["pwm"][side]
-        bs.charge = elec_data["logicbatt"][side]
+        bs.charge = elec_data["logicbatt"]
         bs.temperature = elec_data["temperature"]
         self.right_elec_pub.publish(bs)
 
@@ -478,15 +478,13 @@ class RoboclawNode(Node):
         elec_data["current"] = {sd: curr / 100 for sd,
                                 curr in zip(("left", "right"), currents)}
 
-        status, *voltages = roboclaw.ReadMainBatteryVoltage(self.address)
+        status, voltage = roboclaw.ReadMainBatteryVoltage(self.address)
         self.log_elec(status, "voltages")
-        elec_data["voltage"] = {sd: volt / 10 for sd,
-                                volt in zip(("left", "right"), voltages)}
+        elec_data["voltage"] = voltage / 10
 
-        status, *logicbatts = roboclaw.ReadLogicBatteryVoltage(self.address)
+        status, logicbatt = roboclaw.ReadLogicBatteryVoltage(self.address)
         self.log_elec(status, "logic voltages")
-        elec_data["logicbatt"] = {sd: volt / 10 for sd,
-                                  volt in zip(("left", "right"), logicbatts)}
+        elec_data["logicbatt"] = logicbatt / 10
 
         status, *pwms = roboclaw.ReadPWMs(self.address)
         self.log_elec(status, "PWMs")
