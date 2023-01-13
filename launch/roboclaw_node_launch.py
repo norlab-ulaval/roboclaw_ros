@@ -8,7 +8,7 @@ def generate_launch_description():
             executable='roboclaw_node',
             name='roboclaw_node',
             parameters=[
-                {'dev': '/dev/serial/by-id/usb-03eb_USB_Roboclaw_2x30A-if00'},
+                {'dev': '/dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_2x30A-if00'},
                 {'baud': 115200},
                 {'address': 128},
                 {'max_speed': 2.0},
