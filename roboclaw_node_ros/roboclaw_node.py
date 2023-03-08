@@ -9,6 +9,7 @@ from std_msgs.msg import Float64
 
 from . import roboclaw_driver as roboclaw
 from . import utils as u
+from .electrical_wrapper import ElectricalWrapper
 from .encoder_wrapper import EncoderWrapper
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
@@ -162,12 +163,24 @@ class RoboclawNode(Node):
         )
         self.declare_parameter("pub_odom", True)
         self.PUB_ODOM = self.get_parameter("pub_odom").get_parameter_value().bool_value
+        self.declare_parameter("pub_elec", True)
+        self.PUB_ELEC = self.get_parameter("pub_elec").get_parameter_value().bool_value
         self.declare_parameter("stop_movement", True)
         self.STOP_MOVEMENT = (
             self.get_parameter("stop_movement").get_parameter_value().bool_value
         )
 
         self.encodm = None
+        self.electr = None
+        if self.PUB_ELEC:
+            self.left_elec_pub = self.create_publisher(
+                BatteryState, "/roboclaw/elec/left", 1
+            )
+            self.right_elec_pub = self.create_publisher(
+                BatteryState, "/roboclaw/elec/right", 1
+            )
+            self.electr = ElectricalWrapper(self)
+
         if self.PUB_ODOM:
             self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
             self.left_encoder_pub = self.create_publisher(
@@ -175,12 +188,6 @@ class RoboclawNode(Node):
             )
             self.right_encoder_pub = self.create_publisher(
                 Float64, "/right_encoder_angular_velocity", 1
-            )
-            self.left_elec_pub = self.create_publisher(
-                BatteryState, "/roboclaw/elec/left", 1
-            )
-            self.right_elec_pub = self.create_publisher(
-                BatteryState, "/roboclaw/elec/right", 1
             )
             self.encodm = EncoderWrapper(
                 self.TICKS_PER_METER,
@@ -242,7 +249,37 @@ class RoboclawNode(Node):
             self.get_logger().warn("ReadEncM2 OSError: " + str(e.errno))
             self.get_logger().debug(e)
 
-        # Read Motors Elec
+        if self.PUB_ELEC:
+            try:
+                elec_data = self.poll_elec()
+            except ValueError:
+                pass
+            except OSError as e:
+                self.get_logger().warn("Electrical OSError: " + str(e.errno))
+                self.get_logger().debug(e)
+
+        has_enc1 = "enc1" in vars()
+        has_enc2 = "enc2" in vars()
+        has_encoders = has_enc1 and has_enc2 and enc1 and enc2
+
+        publish_time = self.get_clock().now()
+
+        if has_encoders:
+            self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
+            if self.encodm:
+                # Left motor encoder : M2 / Right motor encoder : M1
+                self.encodm.update_n_publish(enc2, enc1, publish_time)
+                # self.encodm.update_n_publish(enc1, enc2)
+            self.updater.update()
+
+        if self.electr:
+            self.electr.publish_elec(publish_time, elec_data)
+
+        self.get_logger().info("Update done moving if cmd")
+        self.movement.run()
+
+    def poll_elec(self) -> dict:
+        """Read motors electrical data"""
         elec_data = {}
 
         status, *currents = roboclaw.ReadCurrents(self.address)
@@ -269,19 +306,7 @@ class RoboclawNode(Node):
         self.log_elec(status, "temperature")
         elec_data["temperature"] = temperature / 10
 
-        has_enc1 = "enc1" in vars()
-        has_enc2 = "enc2" in vars()
-        has_encoders = has_enc1 and has_enc2 and enc1 and enc2
-
-        if has_encoders:
-            self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
-            if self.encodm:
-                # Left motor encoder : M2 / Right motor encoder : M1
-                self.encodm.update_n_publish(enc2, enc1, elec_data)
-                # self.encodm.update_n_publish(enc1, enc2)
-            self.updater.update()
-        self.get_logger().info("Update done moving if cmd")
-        self.movement.run()
+        return elec_data
 
     def log_elec(self, status: int, name: str):
         if status:

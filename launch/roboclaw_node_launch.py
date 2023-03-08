@@ -19,6 +19,7 @@ def generate_launch_description():
                 {'ticks_per_rotation': 2780},
                 {'base_width': 0.315},
                 {'pub_odom': True},
+                {'pub_elec': True},
                 {'stop_movement': True},
             ],
             remappings=[

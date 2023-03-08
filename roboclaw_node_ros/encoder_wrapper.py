@@ -4,7 +4,6 @@ from math import cos, pi, sin
 from geometry_msgs.msg import Quaternion, TransformStamped
 from nav_msgs.msg import Odometry
 from rclpy.time import Time
-from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Float64
 from tf_transformations import quaternion_from_euler
 
@@ -46,11 +45,6 @@ class EncoderWrapper:
         self.vel_theta = 0
         self.left_ang_vel = 0
         self.right_ang_vel = 0
-        # Electricity publishers
-        self.left_elec_pub = self.parent_node.left_elec_pub
-        self.right_elec_pub = self.parent_node.right_elec_pub
-        # Electrical data
-        self.motor_elec = {}
 
     @staticmethod
     def normalize_angle(angle):
@@ -104,13 +98,13 @@ class EncoderWrapper:
         self.vel_theta = vel_theta
         return vel_x, vel_theta
 
-    def update_n_publish(self, enc_left: float, enc_right: float, elec_data: dict):
+    def update_n_publish(self, enc_left: float, enc_right: float, publish_time: Time):
         """Update odom and elec and publish all data accordingly
 
         Args:
             enc_left: Left Encoder Measurement
             enc_right: Right Encoder Measurement
-            elec_data: Electrical data from the RoboClaw
+            publish_time (Time): Current time
         """
         # 2106 per 0.1 seconds is max speed, error in the 16th bit is 32768
         # TODO lets find a better way to deal with this error
@@ -132,11 +126,9 @@ class EncoderWrapper:
             return
 
         vel_x, vel_theta = self.update(enc_left, enc_right)
-        publish_time = self.clock.now()
         self.publish_odom(
             self.cur_x, self.cur_y, self.cur_theta, publish_time, vel_x, vel_theta
         )
-        self.publish_elec(publish_time, elec_data)
 
     def publish_odom(
         self,
@@ -153,7 +145,7 @@ class EncoderWrapper:
             cur_x (float): Current x coordinate
             cur_y (float): Current y coordinate
             cur_theta (float): Current theta heading
-            cur_time (Time): Current theta heading
+            cur_time (Time): Current time
             vx (float): Linear speed - forward
             vth (float): angular speed => delta theta / time
         """
@@ -207,35 +199,3 @@ class EncoderWrapper:
 
         self.left_encoder_pub.publish(left_enc)
         self.right_encoder_pub.publish(right_enc)
-
-    def publish_elec(self, publish_time: Time, elec_data: dict):
-        """Publish elec in two battery states
-
-        Main Battery Voltage => voltage
-        Current => current
-        Logic Battery Voltage => charge
-        PWM => percentage
-        Temperature => temperature
-        """
-
-        side = "left"
-        bs = BatteryState()
-        bs.header.stamp = publish_time.to_msg()
-        bs.header.frame_id = "base_link"
-        bs.voltage = elec_data["voltage"]
-        bs.current = elec_data["current"][side]
-        bs.percentage = elec_data["pwm"][side]
-        bs.charge = elec_data["logicbatt"]
-        bs.temperature = elec_data["temperature"]
-        self.left_elec_pub.publish(bs)
-
-        side = "right"
-        bs = BatteryState()
-        bs.header.stamp = publish_time.to_msg()
-        bs.header.frame_id = "base_link"
-        bs.voltage = elec_data["voltage"]
-        bs.current = elec_data["current"][side]
-        bs.percentage = elec_data["pwm"][side]
-        bs.charge = elec_data["logicbatt"]
-        bs.temperature = elec_data["temperature"]
-        self.right_elec_pub.publish(bs)
