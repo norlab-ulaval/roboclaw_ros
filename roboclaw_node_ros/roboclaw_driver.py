@@ -698,9 +698,9 @@ class RoboclawDriver:
 
     def SetM1VelocityPID(
         self,
-        p: int,
-        i: int,
-        d: int,
+        p: float,
+        i: float,
+        d: float,
         qpps: int,
     ) -> bool:
         """28 - Set Velocity PID Constants M1
@@ -712,9 +712,9 @@ class RoboclawDriver:
         QPPS (quadrature pulses per second) is the speed of the encoder when the motor is at 100% power. P, I, D are the default values used after a reset.
 
         Args:
-            - p (int): proportional constant (default: 0x00010000)
-            - i (int): integral constant (default: 0x00008000)
-            - d (int): derivative constant (default: 0x00004000)
+            - p (float): proportional constant (default: 1.0)
+            - i (float): integral constant (default: 0.5)
+            - d (float): derivative constant (default: 0.25)
             - qpps (int): encoder speed when the motor is at 100% power (default: 44000)
 
         Returns:
@@ -723,17 +723,17 @@ class RoboclawDriver:
         return self._write4444(
             self.address,
             CMD.SETM1PID,
-            d * 65536,
-            p * 65536,
-            i * 65536,
+            int(d * 65536),
+            int(p * 65536),
+            int(i * 65536),
             qpps,
         )
 
     def SetM2VelocityPID(
         self,
-        p: int,
-        i: int,
-        d: int,
+        p: float,
+        i: float,
+        d: float,
         qpps: int,
     ) -> bool:
         """29 - Set Velocity PID Constants M2
@@ -745,9 +745,9 @@ class RoboclawDriver:
         QPPS (quadrature pulses per second) is the speed of the encoder when the motor is at 100% power. P, I, D are the default values used after a reset.
 
         Args:
-            - p (int): proportional constant (default: 0x00010000)
-            - i (int): integral constant (default: 0x00008000)
-            - d (int): derivative constant (default: 0x00004000)
+            - p (float): proportional constant (default: 1.0)
+            - i (float): integral constant (default: 0.5)
+            - d (float): derivative constant (default: 0.25)
             - qpps (int): encoder speed when the motor is at 100% power (default: 44000)
 
         Returns:
@@ -756,9 +756,9 @@ class RoboclawDriver:
         return self._write4444(
             self.address,
             CMD.SETM2PID,
-            d * 65536,
-            p * 65536,
-            i * 65536,
+            int(d * 65536),
+            int(p * 65536),
+            int(i * 65536),
             qpps,
         )
 

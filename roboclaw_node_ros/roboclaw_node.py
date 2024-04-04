@@ -96,11 +96,12 @@ class RoboclawNode(Node):
 
         self.read_parameters()
 
-        self.driver = self.setup_device(self.dev, self.address, self.baud)
+        self.driver = self.init_device(self.dev, self.address, self.baud)
         self.reset_device()
 
         self.create_subscribers()
         self.create_publishers()
+        self.configure_device()
 
         self.ERRORS = u.ROBOCLAW_ERRORS
 
@@ -146,11 +147,15 @@ class RoboclawNode(Node):
         self.pub_elec = self.declare_parameter("pub_elec", True).value
         self.stop_movement = self.declare_parameter("stop_movement", True).value
 
+        self.P = self.declare_parameter("p_constant", 3.0).value
+        self.I = self.declare_parameter("i_constant", 0.42).value
+        self.D = self.declare_parameter("d_constant", 0.0).value
+        self.qpps = self.declare_parameter("qpps", 6000).value
+
         ## TODO: Add frequency as parameter
-        ## TODO: Add PID parameters as parameters
 
 
-    def setup_device(self, dev_name, address, baud_rate):
+    def init_device(self, dev_name, address, baud_rate):
         try:
             self.get_logger().info("Connecting to Roboclaw at " + dev_name + " with address " + str(address))
             driver = RoboclawDriver(dev_name, baud_rate, address)
@@ -177,6 +182,12 @@ class RoboclawNode(Node):
         except OSError as e:
             self.get_logger().warn("Device reset OSError: " + str(e.errno))
             self.get_logger().debug(e)
+
+    
+    def configure_device(self):
+        self.get_logger().info(f"PID parameters, P: {self.P}, I: {self.I}, D: {self.D}")
+        self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
+        self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
 
 
     def create_subscribers(self):
@@ -214,23 +225,14 @@ class RoboclawNode(Node):
 
         # TODO need find solution to the OSError11 looks like sync problem with serial
         # Read encoders
-        status1, enc1, crc1 = None, None, None
-        status2, enc2, crc2 = None, None, None
+        status, enc1, enc2 = None, None, None
 
         try:
-            status1, enc1, crc1 = self.driver.ReadEncM1()
+            status, enc1, enc2 = self.driver.GetEncoderCounters()
         except ValueError:
             pass
         except OSError as e:
-            self.get_logger().warn("ReadEncM1 OSError: " + str(e.errno))
-            self.get_logger().debug(e)
-
-        try:
-            status2, enc2, crc2 = self.driver.ReadEncM2()
-        except ValueError:
-            pass
-        except OSError as e:
-            self.get_logger().warn("ReadEncM2 OSError: " + str(e.errno))
+            self.get_logger().warn("Read encoders error: " + str(e.errno))
             self.get_logger().debug(e)
 
         if self.pub_elec:
