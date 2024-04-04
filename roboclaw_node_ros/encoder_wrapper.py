@@ -16,7 +16,7 @@ class EncoderWrapper:
         base_width,
         parent_node,
     ):
-        """Encoder Odometry + Electrical
+        """Encoder Odometry
 
         Args:
             ticks_per_meter (float): Ticks per meter, according to the ROS parameters

@@ -7,10 +7,10 @@ from rclpy.node import Node
 from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Float64
 
-from . import roboclaw_driver as roboclaw
-from . import utils as u
+from .roboclaw_driver import RoboclawDriver
 from .electrical_wrapper import ElectricalWrapper
 from .encoder_wrapper import EncoderWrapper
+from . import utils as u
 
 __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 
@@ -22,7 +22,7 @@ class Movement:
 
     def __init__(
         self,
-        address,
+        driver,
         max_speed,
         base_width,
         ticks_per_meter,
@@ -31,11 +31,11 @@ class Movement:
         parent_logger,
     ):
         self.twist = None
-        self.address = address
-        self.MAX_SPEED = max_speed
-        self.BASE_WIDTH = base_width
-        self.TICKS_PER_METER = ticks_per_meter
-        self.TICKS_PER_ROTATION = ticks_per_rotation
+        self.driver = driver
+        self.max_speed = max_speed
+        self.base_width = base_width
+        self.ticks_per_meter = ticks_per_meter
+        self.ticks_per_rotation = ticks_per_rotation
         self.clock = parent_clock
         self.logger = parent_logger
         self.last_set_speed_time = self.clock.now().nanoseconds
@@ -51,17 +51,17 @@ class Movement:
             self.stopped = False
 
         linear_x = self.twist.linear.x
-        if linear_x > self.MAX_SPEED:
-            linear_x = self.MAX_SPEED
-        if linear_x < -self.MAX_SPEED:
-            linear_x = -self.MAX_SPEED
+        if linear_x > self.max_speed:
+            linear_x = self.max_speed
+        if linear_x < -self.max_speed:
+            linear_x = -self.max_speed
 
-        vr = linear_x + self.twist.angular.z * self.BASE_WIDTH  # m/s
-        vl = linear_x - self.twist.angular.z * self.BASE_WIDTH
+        vr = linear_x + self.twist.angular.z * self.base_width  # m/s
+        vl = linear_x - self.twist.angular.z * self.base_width
         self.twist = None
 
-        vr_ticks = int(vr * self.TICKS_PER_METER)  # ticks/s
-        vl_ticks = int(vl * self.TICKS_PER_METER)
+        vr_ticks = int(vr * self.ticks_per_meter)  # ticks/s
+        vl_ticks = int(vl * self.ticks_per_meter)
 
         self.logger.debug("vr_ticks: " + str(vr_ticks) + "vl_ticks: " + str(vl_ticks))
 
@@ -75,15 +75,14 @@ class Movement:
             #     roboclaw.SpeedM1M2(self.address, vr_ticks, vl_ticks)
 
             if vr_ticks == 0 and vl_ticks == 0:
-                roboclaw.ForwardM1(self.address, 0)
-                roboclaw.ForwardM2(self.address, 0)
+                self.driver.SpeedM1M2(0, 0)
                 self.vr_ticks = 0
                 self.vl_ticks = 0
             else:
                 gain = 0.5
                 self.vr_ticks = gain * vr_ticks + (1 - gain) * self.vr_ticks
                 self.vl_ticks = gain * vl_ticks + (1 - gain) * self.vl_ticks
-                roboclaw.SpeedM1M2(self.address, int(self.vr_ticks), int(self.vl_ticks))
+                self.driver.SpeedM1M2(int(self.vr_ticks), int(self.vl_ticks))
         except OSError as e:
             self.logger.warn("SpeedM1M2 OSError: " + str(e.errno))
             self.logger.debug(e)
@@ -94,6 +93,15 @@ class RoboclawNode(Node):
 
     def __init__(self):
         super().__init__("roboclaw_node")
+
+        self.read_parameters()
+
+        self.driver = self.setup_device(self.dev, self.address, self.baud)
+        self.reset_device()
+
+        self.create_subscribers()
+        self.create_publishers()
+
         self.ERRORS = u.ROBOCLAW_ERRORS
 
         freq = 30
@@ -101,106 +109,16 @@ class RoboclawNode(Node):
         period = 1 / freq
         self.timer = self.create_timer(period, self.run)
 
-        self.get_logger().info("Connecting to roboclaw")
-
-        self.declare_parameter("dev", "/dev/ttyACM0")
-        dev_name = self.get_parameter("dev").get_parameter_value().string_value
-        self.get_logger().info(dev_name)
-
-        self.declare_parameter("baud", 115200)
-        baud_rate = self.get_parameter("baud").get_parameter_value().integer_value
-
-        self.declare_parameter("address", 128)
-        self.address = self.get_parameter("address").get_parameter_value().integer_value
-        if self.address > 0x87 or self.address < 0x80:
-            self.get_logger().fatal("Address out of range")
-            self.shutdown("Address out of range")
-
-        # TODO need someway to check if address is correct
-        try:
-            roboclaw.Open(dev_name, baud_rate)
-        except Exception as e:
-            self.get_logger().fatal("Could not connect to RoboClaw")
-            self.get_logger().debug(e)
-            self.shutdown("Could not connect to RoboClaw")
-
         self.updater = diagnostic_updater.Updater(self)
         self.updater.setHardwareID("RoboClaw")
-        self.updater.add(
-            diagnostic_updater.FunctionDiagnosticTask("Vitals", self.check_vitals)
-        )
+        self.updater.add(diagnostic_updater.FunctionDiagnosticTask("Vitals", self.check_vitals))
 
-        try:
-            version = roboclaw.ReadVersion(self.address)
-        except Exception as e:
-            self.get_logger().warn("Problem getting RoboClaw version")
-            self.get_logger().warn(e)
-            pass
-
-        if not version[0]:
-            self.get_logger().warn("Could not get version from RoboClaw")
-        else:
-            self.get_logger().debug(repr(version[1]))
-
-        roboclaw.SpeedM1M2(self.address, 0, 0)
-        roboclaw.ResetEncoders(self.address)
-
-        self.declare_parameter("max_speed", 2.0)
-        self.MAX_SPEED = (
-            self.get_parameter("max_speed").get_parameter_value().double_value
-        )
-        self.declare_parameter("ticks_per_meter", 4342.2)
-        self.TICKS_PER_METER = (
-            self.get_parameter("ticks_per_meter").get_parameter_value().double_value
-        )
-        self.declare_parameter("ticks_per_rotation", 2780)
-        self.TICKS_PER_ROTATION = (
-            self.get_parameter("ticks_per_rotation").get_parameter_value().integer_value
-        )
-        self.declare_parameter("base_width", 0.315)
-        self.BASE_WIDTH = (
-            self.get_parameter("base_width").get_parameter_value().double_value
-        )
-        self.declare_parameter("pub_odom", True)
-        self.PUB_ODOM = self.get_parameter("pub_odom").get_parameter_value().bool_value
-        self.declare_parameter("pub_elec", True)
-        self.PUB_ELEC = self.get_parameter("pub_elec").get_parameter_value().bool_value
-        self.declare_parameter("stop_movement", True)
-        self.STOP_MOVEMENT = (
-            self.get_parameter("stop_movement").get_parameter_value().bool_value
-        )
-
-        self.encodm = None
-        self.electr = None
-        if self.PUB_ELEC:
-            self.left_elec_pub = self.create_publisher(
-                BatteryState, "/roboclaw/elec/left", 1
-            )
-            self.right_elec_pub = self.create_publisher(
-                BatteryState, "/roboclaw/elec/right", 1
-            )
-            self.electr = ElectricalWrapper(self)
-
-        if self.PUB_ODOM:
-            self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
-            self.left_encoder_pub = self.create_publisher(
-                Float64, "/left_encoder_angular_velocity", 1
-            )
-            self.right_encoder_pub = self.create_publisher(
-                Float64, "/right_encoder_angular_velocity", 1
-            )
-            self.encodm = EncoderWrapper(
-                self.TICKS_PER_METER,
-                self.TICKS_PER_ROTATION,
-                self.BASE_WIDTH,
-                self,
-            )
         self.movement = Movement(
-            self.address,
-            self.MAX_SPEED,
-            self.BASE_WIDTH,
-            self.TICKS_PER_METER,
-            self.TICKS_PER_ROTATION,
+            self.driver,
+            self.max_speed,
+            self.base_width,
+            self.ticks_per_meter,
+            self.ticks_per_rotation,
             self.get_clock(),
             self.get_logger(),
         )
@@ -211,18 +129,84 @@ class RoboclawNode(Node):
         )
         self.get_clock().sleep_for(rclpy.duration.Duration(seconds=1.0))
 
+
+    def read_parameters(self):
+        self.dev = self.declare_parameter("dev", "/dev/ttyACM0").value
+        self.baud = self.declare_parameter("baud", 115200).value
+        self.address = self.declare_parameter("address", 128).value
+        if self.address > 0x87 or self.address < 0x80:
+            self.get_logger().fatal("Address out of range")
+            self.shutdown("Address out of range")
+
+        self.max_speed = self.declare_parameter("max_speed", 2.0).value
+        self.ticks_per_meter = self.declare_parameter("ticks_per_meter", 4342.2).value
+        self.ticks_per_rotation = self.declare_parameter("ticks_per_rotation", 2780).value
+        self.base_width = self.declare_parameter("base_width", 0.315).value
+        self.pub_odom = self.declare_parameter("pub_odom", True).value
+        self.pub_elec = self.declare_parameter("pub_elec", True).value
+        self.stop_movement = self.declare_parameter("stop_movement", True).value
+
+        ## TODO: Add frequency as parameter
+        ## TODO: Add PID parameters as parameters
+
+
+    def setup_device(self, dev_name, address, baud_rate):
+        try:
+            self.get_logger().info("Connecting to Roboclaw at " + dev_name + " with address " + str(address))
+            driver = RoboclawDriver(dev_name, baud_rate, address)
+            self.get_logger().info("Connected!")
+        except Exception as e:
+            self.get_logger().fatal("Could not connect to Roboclaw at " + dev_name + " with address " + str(address))
+            self.get_logger().debug(e)
+            self.shutdown("Could not connect to Roboclaw")
+
+        try:
+            _, version = driver.ReadVersion()
+            self.get_logger().info("Roboclaw version: " + str(version))
+        except Exception as e:
+            self.get_logger().warn("Problem getting Roboclaw version")
+            self.get_logger().debug(e)
+
+        return driver
+    
+
+    def reset_device(self):
+        try:
+            self.driver.SpeedM1M2(0, 0)
+            self.driver.ResetEncoders()
+        except OSError as e:
+            self.get_logger().warn("Device reset OSError: " + str(e.errno))
+            self.get_logger().debug(e)
+
+
+    def create_subscribers(self):
+        self.cmd_vel_sub = self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 1)
+
+
+    def create_publishers(self):
+        if self.pub_elec:
+            self.left_elec_pub = self.create_publisher(BatteryState, "/roboclaw/elec/left", 1)
+            self.right_elec_pub = self.create_publisher(BatteryState, "/roboclaw/elec/right", 1)
+            self.electr = ElectricalWrapper(self)
+        
+        if self.pub_odom:
+            self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
+            self.left_encoder_pub = self.create_publisher(Float64, "/left_encoder_angular_velocity", 1)
+            self.right_encoder_pub = self.create_publisher(Float64, "/right_encoder_angular_velocity", 1)
+            self.encodm = EncoderWrapper(self.ticks_per_meter, self.ticks_per_rotation, self.base_width, self)
+
+
     def run(self):
-        # stop movement if robot doesn't recieve commands for 1 sec
+        # stop movement if robot doesn't receive commands for 1 sec
         if (
-            self.STOP_MOVEMENT
+            self.stop_movement
             and not self.movement.stopped
             and self.get_clock().now().nanoseconds - self.movement.last_set_speed_time
             > 10e9
         ):
             self.get_logger().info("Did not get command for 1 second, stopping")
             try:
-                roboclaw.ForwardM1(self.address, 0)
-                roboclaw.ForwardM2(self.address, 0)
+                self.driver.SpeedM1M2(0, 0)
             except OSError as e:
                 self.get_logger().error("Could not stop")
                 self.get_logger().debug(e)
@@ -234,7 +218,7 @@ class RoboclawNode(Node):
         status2, enc2, crc2 = None, None, None
 
         try:
-            status1, enc1, crc1 = roboclaw.ReadEncM1(self.address)
+            status1, enc1, crc1 = self.driver.ReadEncM1()
         except ValueError:
             pass
         except OSError as e:
@@ -242,14 +226,14 @@ class RoboclawNode(Node):
             self.get_logger().debug(e)
 
         try:
-            status2, enc2, crc2 = roboclaw.ReadEncM2(self.address)
+            status2, enc2, crc2 = self.driver.ReadEncM2()
         except ValueError:
             pass
         except OSError as e:
             self.get_logger().warn("ReadEncM2 OSError: " + str(e.errno))
             self.get_logger().debug(e)
 
-        if self.PUB_ELEC:
+        if self.pub_elec:
             try:
                 elec_data = self.poll_elec()
             except ValueError:
@@ -278,35 +262,37 @@ class RoboclawNode(Node):
         self.get_logger().info("Update done moving if cmd")
         self.movement.run()
 
+
     def poll_elec(self) -> dict:
         """Read motors electrical data"""
         elec_data = {}
 
-        status, *currents = roboclaw.ReadCurrents(self.address)
+        status, *currents = self.driver.ReadCurrents()
         self.log_elec(status, "currents")
         elec_data["current"] = {
             sd: curr / 100 for sd, curr in zip(("left", "right"), currents)
         }
 
-        status, voltage = roboclaw.ReadMainBatteryVoltage(self.address)
+        status, voltage = self.driver.ReadMainBatteryVoltage()
         self.log_elec(status, "voltages")
         elec_data["voltage"] = voltage / 10
 
-        status, logicbatt = roboclaw.ReadLogicBatteryVoltage(self.address)
+        status, logicbatt = self.driver.ReadLogicBatteryVoltage()
         self.log_elec(status, "logic voltages")
         elec_data["logicbatt"] = logicbatt / 10
 
-        status, *pwms = roboclaw.ReadPWMs(self.address)
+        status, *pwms = self.driver.ReadPWMs()
         self.log_elec(status, "PWMs")
         elec_data["pwm"] = {
             sd: pwm / 327.67 for sd, pwm in zip(("left", "right"), pwms)
         }
 
-        status, temperature = roboclaw.ReadTemp(self.address)
+        status, temperature = self.driver.ReadTemp()
         self.log_elec(status, "temperature")
         elec_data["temperature"] = temperature / 10
 
         return elec_data
+
 
     def log_elec(self, status: int, name: str):
         if status:
@@ -314,14 +300,16 @@ class RoboclawNode(Node):
         else:
             self.get_logger().info(f"Missing {name.lower()}")
 
+
     def cmd_vel_callback(self, twist):
         self.movement.last_set_speed_time = self.get_clock().now().nanoseconds
         self.movement.twist = twist
 
+
     # TODO: Need to make this work when more than one error is raised
     def check_vitals(self, stat):
         try:
-            status = roboclaw.ReadError(self.address)[1]
+            status = self.driver.ReadError()[1]
         except OSError as e:
             self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
             self.get_logger().debug(e)
@@ -331,30 +319,29 @@ class RoboclawNode(Node):
         try:
             stat.add(
                 "Main Batt V:",
-                str(float(roboclaw.ReadMainBatteryVoltage(self.address)[1] / 10)),
+                str(float(self.driver.ReadMainBatteryVoltage()[1] / 10)),
             )
             stat.add(
                 "Logic Batt V:",
-                str(float(roboclaw.ReadLogicBatteryVoltage(self.address)[1] / 10)),
+                str(float(self.driver.ReadLogicBatteryVoltage()[1] / 10)),
             )
-            stat.add("Temp1 C:", str(float(roboclaw.ReadTemp(self.address)[1] / 10)))
-            stat.add("Temp2 C:", str(float(roboclaw.ReadTemp2(self.address)[1] / 10)))
+            stat.add("Temp1 C:", str(float(self.driver.ReadTemp()[1] / 10)))
+            stat.add("Temp2 C:", str(float(self.driver.ReadTemp2()[1] / 10)))
         except OSError as e:
             self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
             self.get_logger().debug(e)
         return stat
 
+
     # TODO: need clean shutdown so motors stop even if new msgs are arriving
     def shutdown(self, str_msg):
         self.get_logger().info("Shutting down :" + str_msg)
         try:
-            roboclaw.ForwardM1(self.address, 0)
-            roboclaw.ForwardM2(self.address, 0)
+            self.driver.SpeedM1M2(0, 0)
         except OSError:
             self.get_logger().error("Shutdown did not work trying again")
             try:
-                roboclaw.ForwardM1(self.address, 0)
-                roboclaw.ForwardM2(self.address, 0)
+                self.driver.SpeedM1M2(0, 0)
             except OSError as e:
                 self.get_logger().error("Could not shutdown motors!!!!")
                 self.get_logger().debug(e)
