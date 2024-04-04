@@ -4,6 +4,6 @@
         name="diagnostic_aggregator" >
     <!-- Load the file you made above -->
     <rosparam command="load"
-              file="$(find roboclaw_node)/config/roboclaw_diag.yaml" />
+              file="$(find roboclaw_node)/config/diagnostic.yaml" />
   </node>
 </launch>
