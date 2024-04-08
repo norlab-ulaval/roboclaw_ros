@@ -41,6 +41,8 @@ class RoboclawNode(Node):
         """Read parameters from the parameter server"""
 
         self.get_logger().info("Reading parameters...")
+
+        # Device params
         self.dev = self.init_parameter("dev", "/dev/ttyACM0")
         self.baud = self.init_parameter("baud", 115200)
         self.address = self.init_parameter("address", 128)
@@ -51,18 +53,19 @@ class RoboclawNode(Node):
         # Movement params
         self.max_speed_linear = self.init_parameter("max_speed_linear", 2.0)
         self.max_speed_angular = self.init_parameter("max_speed_angular", 1.0)
+        self.stop_if_idle = self.init_parameter("stop_if_idle", True)
+        self.idle_timeout = self.init_parameter("idle_timeout", 1.0)
+
+        # Odometry params
         self.ticks_per_meter = self.init_parameter("ticks_per_meter", 4342.2)
         self.ticks_per_rotation = self.init_parameter("ticks_per_rotation", 2780)
         self.base_width = self.init_parameter("base_width", 0.315)
-        self.stop_if_idle = self.init_parameter("stop_if_idle", True)
-        self.idle_timeout = self.init_parameter("idle_timeout", 1.0)
 
         # Roboclaw params
         self.P = self.init_parameter("p_constant", 3.0)
         self.I = self.init_parameter("i_constant", 0.42)
         self.D = self.init_parameter("d_constant", 0.0)
         self.qpps = self.init_parameter("qpps", 6000)
-        # TODO: Add acceleration parameters
 
         # Publishing params
         self.odom_rate = self.init_parameter("odom_rate", 10)
@@ -72,12 +75,14 @@ class RoboclawNode(Node):
         self.publish_elec = self.init_parameter("pub_elec", True)
         self.publish_tf = self.init_parameter("pub_tf", False)
 
+        # TODO: add a parameter for the acceleration (tried but it didn't work)
+
 
     def init_parameter(self, name, default):
         """Initialize a parameter and log it"""
 
         value = self.declare_parameter(name, default).value
-        self.get_logger().info(f"    {name}: {value}")
+        self.get_logger().info(f"  {name}: {value}")
         return value
     
 
@@ -170,6 +175,7 @@ class RoboclawNode(Node):
             self.odom_timer = self.create_timer(1.0 / self.odom_rate, self.encoder_wrapper.update_and_publish)
         if self.elec_rate > 0:
             self.elec_timer = self.create_timer(1.0 / self.elec_rate, self.electrical_wrapper.update_and_publish)
+            
         self.idle_timer = self.create_timer(1 / 30, self.idle_callback)
         self.dynamic_params_timer = self.create_timer(1.0, self.update_parameters)
 

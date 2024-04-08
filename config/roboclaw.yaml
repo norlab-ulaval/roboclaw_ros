@@ -7,11 +7,13 @@ roboclaw_node:
     # Movement parameters
     max_speed_linear: 2.0
     max_speed_angular: 1.0
+    stop_if_idle: True
+    idle_timeout: 0.5
+
+    # Odometry parameters
     ticks_per_meter: 3802.4
     ticks_per_rotation: 2780
     base_width: 0.315
-    stop_if_idle: True
-    idle_timeout: 0.5
 
     # PID parameters
     p_constant: 3.0
