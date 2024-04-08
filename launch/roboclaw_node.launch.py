@@ -6,7 +6,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     ld = LaunchDescription()
-    config_folder = os.path.join(get_package_share_directory('roboclaw_node_ros'), 'config')
+    config_folder = get_package_share_directory('roboclaw_node_ros')
+
+    print(os.path.join(config_folder, 'roboclaw.yaml'))
 
     # Roboclaw node
     roboclaw_node = Node(
