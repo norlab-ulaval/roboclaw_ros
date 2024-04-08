@@ -98,10 +98,11 @@ class RoboclawNode(Node):
 
         self.driver = self.init_device(self.dev, self.address, self.baud)
         self.reset_device()
+        self.configure_device()
 
         self.create_subscribers()
-        self.create_publishers()
-        self.configure_device()
+        self.create_wrappers()
+        self.create_timers()
 
         self.ERRORS = u.ROBOCLAW_ERRORS
 
@@ -139,20 +140,26 @@ class RoboclawNode(Node):
             self.get_logger().fatal("Address out of range")
             self.shutdown("Address out of range")
 
+        # Movement params
         self.max_speed = self.declare_parameter("max_speed", 2.0).value
         self.ticks_per_meter = self.declare_parameter("ticks_per_meter", 4342.2).value
         self.ticks_per_rotation = self.declare_parameter("ticks_per_rotation", 2780).value
         self.base_width = self.declare_parameter("base_width", 0.315).value
-        self.pub_odom = self.declare_parameter("pub_odom", True).value
-        self.pub_elec = self.declare_parameter("pub_elec", True).value
         self.stop_movement = self.declare_parameter("stop_movement", True).value
 
+        # Roboclaw params
         self.P = self.declare_parameter("p_constant", 3.0).value
         self.I = self.declare_parameter("i_constant", 0.42).value
         self.D = self.declare_parameter("d_constant", 0.0).value
         self.qpps = self.declare_parameter("qpps", 6000).value
 
-        ## TODO: Add frequency as parameter
+        # Publishing params
+        self.odom_rate = self.declare_parameter("odom_rate", 10).value
+        self.elec_rate = self.declare_parameter("elec_rate", 1).value
+        self.publish_odom = self.declare_parameter("pub_odom", True).value
+        self.publish_encoders = self.declare_parameter("pub_encoders", True).value
+        self.publish_elec = self.declare_parameter("pub_elec", True).value
+        self.publish_tf = self.declare_parameter("pub_tf", False).value
 
 
     def init_device(self, dev_name, address, baud_rate):
@@ -185,6 +192,7 @@ class RoboclawNode(Node):
 
     
     def configure_device(self):
+        # Set PID parameters
         self.get_logger().info(f"PID parameters, P: {self.P}, I: {self.I}, D: {self.D}")
         self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
         self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
@@ -194,17 +202,25 @@ class RoboclawNode(Node):
         self.cmd_vel_sub = self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 1)
 
 
-    def create_publishers(self):
-        if self.pub_elec:
-            self.left_elec_pub = self.create_publisher(BatteryState, "/roboclaw/elec/left", 1)
-            self.right_elec_pub = self.create_publisher(BatteryState, "/roboclaw/elec/right", 1)
-            self.electr = ElectricalWrapper(self)
-        
-        if self.pub_odom:
-            self.odom_pub = self.create_publisher(Odometry, "/odom_roboclaw", 1)
-            self.left_encoder_pub = self.create_publisher(Float64, "/left_encoder_angular_velocity", 1)
-            self.right_encoder_pub = self.create_publisher(Float64, "/right_encoder_angular_velocity", 1)
-            self.encodm = EncoderWrapper(self.ticks_per_meter, self.ticks_per_rotation, self.base_width, self)
+    def create_wrappers(self):
+        self.encoder_wrapper = EncoderWrapper(
+            self,
+            self.driver,
+            self.base_width,
+            self.ticks_per_meter,
+            self.ticks_per_rotation,
+            self.publish_odom,
+            self.publish_encoders,
+            self.publish_tf
+        )
+        # self.electrical_wrapper = ElectricalWrapper(self)
+
+
+    def create_timers(self):
+        if self.odom_rate > 0:
+            self.odom_timer = self.create_timer(1.0 / self.odom_rate, self.encoder_wrapper.update_and_publish)
+        # if self.elec_rate > 0:
+        #     self.elec_timer = self.create_timer(1.0 / self.elec_rate, self.electrical_wrapper.publish_elec)
 
 
     def run(self):
@@ -223,43 +239,20 @@ class RoboclawNode(Node):
                 self.get_logger().debug(e)
             self.movement.stopped = True
 
-        # TODO need find solution to the OSError11 looks like sync problem with serial
-        # Read encoders
-        status, enc1, enc2 = None, None, None
+        # # Update electrical data
+        # if self.publish_elec:
+        #     try:
+        #         elec_data = self.poll_elec()
+        #     except ValueError:
+        #         pass
+        #     except OSError as e:
+        #         self.get_logger().warn("Electrical OSError: " + str(e.errno))
+        #         self.get_logger().debug(e)
 
-        try:
-            status, enc1, enc2 = self.driver.GetEncoderCounters()
-        except ValueError:
-            pass
-        except OSError as e:
-            self.get_logger().warn("Read encoders error: " + str(e.errno))
-            self.get_logger().debug(e)
+        # publish_time = self.get_clock().now()
 
-        if self.pub_elec:
-            try:
-                elec_data = self.poll_elec()
-            except ValueError:
-                pass
-            except OSError as e:
-                self.get_logger().warn("Electrical OSError: " + str(e.errno))
-                self.get_logger().debug(e)
-
-        has_enc1 = "enc1" in vars()
-        has_enc2 = "enc2" in vars()
-        has_encoders = has_enc1 and has_enc2 and enc1 and enc2
-
-        publish_time = self.get_clock().now()
-
-        if has_encoders:
-            self.get_logger().debug(" Encoders " + str(enc1) + " " + str(enc2))
-            if self.encodm:
-                # Left motor encoder : M2 / Right motor encoder : M1
-                self.encodm.update_n_publish(enc2, enc1, publish_time)
-                # self.encodm.update_n_publish(enc1, enc2)
-            self.updater.update()
-
-        if self.electr:
-            self.electr.publish_elec(publish_time, elec_data)
+        # if self.electrical_wrapper:
+        #     self.electrical_wrapper.publish_elec(publish_time, elec_data)
 
         self.get_logger().info("Update done moving if cmd")
         self.movement.run()
@@ -347,14 +340,6 @@ class RoboclawNode(Node):
             except OSError as e:
                 self.get_logger().error("Could not shutdown motors!!!!")
                 self.get_logger().debug(e)
-
-    # def __enter__(self):
-    #     return self
-
-    # def __exit__(self, exc_type, exc_value, tb):
-    #     self.shutdown(str(exc_value))
-    #     self.destroy_node()
-    #     rclpy.shutdown()
 
 
 def main(args=None):

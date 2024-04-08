@@ -3,14 +3,24 @@ roboclaw_node:
     dev: '/dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_2x30A-if00'
     baud: 115200
     address: 128
+
+    # Movement parameters
     max_speed: 5.0
     ticks_per_meter: 3802.4
     ticks_per_rotation: 2780
     base_width: 0.315
-    pub_odom: True
-    pub_elec: True
     stop_movement: True
+
+    # PID parameters
     p_constant: 3.0
     i_constant: 0.42
     d_constant: 0.0
     qpps: 6000
+
+    # Publish parameters
+    odom_rate: 10
+    elec_rate: 10
+    publish_odom: True
+    publish_encoders: True
+    publish_elec: True
+    publish_tf: False
