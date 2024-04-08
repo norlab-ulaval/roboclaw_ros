@@ -5,7 +5,8 @@ roboclaw_node:
     address: 128
 
     # Movement parameters
-    max_speed: 5.0
+    max_speed_linear: 2.0
+    max_speed_angular: 1.0
     ticks_per_meter: 3802.4
     ticks_per_rotation: 2780
     base_width: 0.315

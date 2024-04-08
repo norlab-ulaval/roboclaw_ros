@@ -34,8 +34,8 @@ class ElectricalWrapper:
         self.poll_electrical_data()
 
         # Publishers
-        self.left_elec_pub = self.create_publisher(BatteryState, "/motors/left/electrical", 1)
-        self.right_elec_pub = self.create_publisher(BatteryState, "/motors/right/electrical", 1)
+        self.left_elec_pub = self.node.create_publisher(BatteryState, "/motors/left/electrical", 1)
+        self.right_elec_pub = self.node.create_publisher(BatteryState, "/motors/right/electrical", 1)
 
 
     def update_and_publish(self):

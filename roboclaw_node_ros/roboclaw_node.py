@@ -14,77 +14,6 @@ __author__ = "bwbazemore@uga.edu (Brad Bazemore)"
 # TODO need to find some better was of handling OSerror 11 or preventing it, any ideas?
 
 
-class Movement:
-    """Movement class - responsible of running the RoboClaw and"""
-
-    def __init__(
-        self,
-        driver,
-        max_speed,
-        base_width,
-        ticks_per_meter,
-        ticks_per_rotation,
-        parent_clock,
-        parent_logger,
-    ):
-        self.twist = None
-        self.driver = driver
-        self.max_speed = max_speed
-        self.base_width = base_width
-        self.ticks_per_meter = ticks_per_meter
-        self.ticks_per_rotation = ticks_per_rotation
-        self.clock = parent_clock
-        self.logger = parent_logger
-        self.last_cmd_timestamp = self.clock.now().nanoseconds
-        self.vr_ticks = 0
-        self.vl_ticks = 0
-        self.stopped = True
-
-    def run(self):
-        if self.twist is None:
-            return
-
-        if self.twist.linear.x != 0 or self.twist.angular.z != 0:
-            self.stopped = False
-
-        linear_x = self.twist.linear.x
-        if linear_x > self.max_speed:
-            linear_x = self.max_speed
-        if linear_x < -self.max_speed:
-            linear_x = -self.max_speed
-
-        vr = linear_x + self.twist.angular.z * self.base_width  # m/s
-        vl = linear_x - self.twist.angular.z * self.base_width
-        self.twist = None
-
-        vr_ticks = int(vr * self.ticks_per_meter)  # ticks/s
-        vl_ticks = int(vl * self.ticks_per_meter)
-
-        self.logger.debug("vr_ticks: " + str(vr_ticks) + "vl_ticks: " + str(vl_ticks))
-
-        try:
-            # This is a hack way to keep a poorly tuned PID from making noise at speed 0
-
-            # if vr_ticks is 0 and vl_ticks is 0:
-            #     roboclaw.ForwardM1(self.address, 0)
-            #     roboclaw.ForwardM2(self.address, 0)
-            # else:
-            #     roboclaw.SpeedM1M2(self.address, vr_ticks, vl_ticks)
-
-            if vr_ticks == 0 and vl_ticks == 0:
-                self.driver.SpeedM1M2(0, 0)
-                self.vr_ticks = 0
-                self.vl_ticks = 0
-            else:
-                gain = 0.5
-                self.vr_ticks = gain * vr_ticks + (1 - gain) * self.vr_ticks
-                self.vl_ticks = gain * vl_ticks + (1 - gain) * self.vl_ticks
-                self.driver.SpeedM1M2(int(self.vr_ticks), int(self.vl_ticks))
-        except OSError as e:
-            self.logger.warn("SpeedM1M2 OSError: " + str(e.errno))
-            self.logger.debug(e)
-
-
 class RoboclawNode(Node):
     """RoboClaw Node"""
 
@@ -103,52 +32,73 @@ class RoboclawNode(Node):
 
         self.updater = diagnostic_updater.Updater(self)
         self.updater.setHardwareID("RoboClaw")
-        self.updater.add(diagnostic_updater.FunctionDiagnosticTask("Vitals", self.check_vitals))
+        self.updater.add(diagnostic_updater.FunctionDiagnosticTask("Vitals", self.diagnostics))
 
-        self.movement = Movement(
-            self.driver,
-            self.max_speed,
-            self.base_width,
-            self.ticks_per_meter,
-            self.ticks_per_rotation,
-            self.get_clock(),
-            self.get_logger(),
-        )
         self.last_cmd_timestamp = self.get_clock().now().nanoseconds
 
 
     def read_parameters(self):
-        self.dev = self.declare_parameter("dev", "/dev/ttyACM0").value
-        self.baud = self.declare_parameter("baud", 115200).value
-        self.address = self.declare_parameter("address", 128).value
+        """Read parameters from the parameter server"""
+
+        self.get_logger().info("Reading parameters...")
+        self.dev = self.init_parameter("dev", "/dev/ttyACM0")
+        self.baud = self.init_parameter("baud", 115200)
+        self.address = self.init_parameter("address", 128)
         if self.address > 0x87 or self.address < 0x80:
             self.get_logger().fatal("Address out of range")
             self.shutdown("Address out of range")
 
         # Movement params
-        self.max_speed = self.declare_parameter("max_speed", 2.0).value
-        self.ticks_per_meter = self.declare_parameter("ticks_per_meter", 4342.2).value
-        self.ticks_per_rotation = self.declare_parameter("ticks_per_rotation", 2780).value
-        self.base_width = self.declare_parameter("base_width", 0.315).value
-        self.stop_if_idle = self.declare_parameter("stop_if_idle", True).value
-        self.idle_timeout = self.declare_parameter("idle_timeout", 1.0).value * 10e9    # in nanoseconds
+        self.max_speed_linear = self.init_parameter("max_speed_linear", 2.0)
+        self.max_speed_angular = self.init_parameter("max_speed_angular", 1.0)
+        self.ticks_per_meter = self.init_parameter("ticks_per_meter", 4342.2)
+        self.ticks_per_rotation = self.init_parameter("ticks_per_rotation", 2780)
+        self.base_width = self.init_parameter("base_width", 0.315)
+        self.stop_if_idle = self.init_parameter("stop_if_idle", True)
+        self.idle_timeout = self.init_parameter("idle_timeout", 1.0)
 
         # Roboclaw params
-        self.P = self.declare_parameter("p_constant", 3.0).value
-        self.I = self.declare_parameter("i_constant", 0.42).value
-        self.D = self.declare_parameter("d_constant", 0.0).value
-        self.qpps = self.declare_parameter("qpps", 6000).value
+        self.P = self.init_parameter("p_constant", 3.0)
+        self.I = self.init_parameter("i_constant", 0.42)
+        self.D = self.init_parameter("d_constant", 0.0)
+        self.qpps = self.init_parameter("qpps", 6000)
+        # TODO: Add acceleration parameters
 
         # Publishing params
-        self.odom_rate = self.declare_parameter("odom_rate", 10).value
-        self.elec_rate = self.declare_parameter("elec_rate", 1).value
-        self.publish_odom = self.declare_parameter("pub_odom", True).value
-        self.publish_encoders = self.declare_parameter("pub_encoders", True).value
-        self.publish_elec = self.declare_parameter("pub_elec", True).value
-        self.publish_tf = self.declare_parameter("pub_tf", False).value
+        self.odom_rate = self.init_parameter("odom_rate", 10)
+        self.elec_rate = self.init_parameter("elec_rate", 1)
+        self.publish_odom = self.init_parameter("pub_odom", True)
+        self.publish_encoders = self.init_parameter("pub_encoders", True)
+        self.publish_elec = self.init_parameter("pub_elec", True)
+        self.publish_tf = self.init_parameter("pub_tf", False)
+
+
+    def init_parameter(self, name, default):
+        """Initialize a parameter and log it"""
+
+        value = self.declare_parameter(name, default).value
+        self.get_logger().info(f"    {name}: {value}")
+        return value
+    
+
+    def update_parameters(self):
+        """Update dynamic parameters once in a while"""
+
+        self.max_speed_linear = self.get_parameter("max_speed_linear").value
+        self.max_speed_angular = self.get_parameter("max_speed_angular").value
+        self.stop_if_idle = self.get_parameter("stop_if_idle").value
+        self.idle_timeout = self.get_parameter("idle_timeout").value
+
+        self.P = self.get_parameter("p_constant").value
+        self.I = self.get_parameter("i_constant").value
+        self.D = self.get_parameter("d_constant").value
+        self.qpps = self.get_parameter("qpps").value
+        self.configure_device()     
 
 
     def init_device(self, dev_name, address, baud_rate):
+        """Initialize the Roboclaw device and connect to it"""
+
         try:
             self.get_logger().info("Connecting to Roboclaw at " + dev_name + " with address " + str(address))
             driver = RoboclawDriver(dev_name, baud_rate, address)
@@ -169,6 +119,8 @@ class RoboclawNode(Node):
     
 
     def reset_device(self):
+        """Reset the roboclaw speed and encoder counters"""
+
         try:
             self.driver.SpeedM1M2(0, 0)
             self.driver.ResetEncoders()
@@ -178,17 +130,22 @@ class RoboclawNode(Node):
 
     
     def configure_device(self):
+        """Configure the Roboclaw device with the ROS parameters"""
+
         # Set PID parameters
-        self.get_logger().info(f"PID parameters, P: {self.P}, I: {self.I}, D: {self.D}")
         self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
         self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
 
 
     def create_subscribers(self):
+        """Create subscribers for the node"""
+
         self.cmd_vel_sub = self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 1)
 
 
     def create_wrappers(self):
+        """Create the encoder and electrical wrappers"""
+
         self.encoder_wrapper = EncoderWrapper(
             self,
             self.driver,
@@ -207,19 +164,21 @@ class RoboclawNode(Node):
 
 
     def create_timers(self):
+        """Create timers for the node"""
+
         if self.odom_rate > 0:
             self.odom_timer = self.create_timer(1.0 / self.odom_rate, self.encoder_wrapper.update_and_publish)
         if self.elec_rate > 0:
             self.elec_timer = self.create_timer(1.0 / self.elec_rate, self.electrical_wrapper.update_and_publish)
         self.idle_timer = self.create_timer(1 / 30, self.idle_callback)
+        self.dynamic_params_timer = self.create_timer(1.0, self.update_parameters)
 
 
     def idle_callback(self):
         """Stop the robot if no commands are received for 'idle_timeout' seconds"""
 
         now = self.get_clock().now().nanoseconds
-        if (self.stop_if_idle and now - self.last_cmd_timestamp > self.idle_timeout):
-
+        if (self.stop_if_idle and now - self.last_cmd_timestamp > self.idle_timeout * 1e9):
             self.get_logger().info(f"Did not get command for {self.idle_timeout} second, stopping")
             try:
                 self.driver.SpeedM1M2(0, 0)
@@ -230,12 +189,31 @@ class RoboclawNode(Node):
 
 
     def cmd_vel_callback(self, twist):
-        self.movement.last_cmd_timestamp = self.get_clock().now().nanoseconds
-        self.movement.twist = twist
-        self.movement.run()
+        """Callback for /cmd_vel topic, move the robot according to the Twist message"""
+
+        self.last_cmd_timestamp = self.get_clock().now().nanoseconds
+
+        # Limit the speed
+        linear_x = min(max(twist.linear.x, -self.max_speed_linear), self.max_speed_linear)
+        angular_z = min(max(twist.angular.z, -self.max_speed_angular), self.max_speed_angular)
+
+        # Convert to motor speeds
+        right_speed = int((linear_x + angular_z * self.base_width) * self.ticks_per_meter)  # ticks/s
+        left_speed = int((linear_x - angular_z * self.base_width) * self.ticks_per_meter)
+
+        self.get_logger().debug(f"Sending command -> right: {str(right_speed)}, left: {str(left_speed)} (ticks/sec)")
+
+        # Send the command
+        try:
+            self.driver.SpeedM1M2(right_speed, left_speed)
+        except OSError as e:
+            self.get_logger().warn("SpeedM1M2 OSError: " + str(e.errno))
+            self.get_logger().debug(e)
 
 
-    def check_vitals(self, stat):
+    def diagnostics(self, stat):
+        """Read the error status of the Roboclaw and report it as diagnostics"""
+
         try:
             status = self.driver.ReadError()[1]
         except OSError as e:
@@ -249,6 +227,8 @@ class RoboclawNode(Node):
 
     # TODO: need clean shutdown so motors stop even if new msgs are arriving
     def shutdown(self, str_msg):
+        """Shutdown the node"""
+        
         self.get_logger().info("Shutting down :" + str_msg)
         try:
             self.driver.SpeedM1M2(0, 0)

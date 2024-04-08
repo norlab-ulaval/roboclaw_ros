@@ -116,14 +116,15 @@ class EncoderWrapper:
     def update_odometry(self):
         """Update the odometry estimation"""
 
-        # Compute the traveled distance
+        # Compute the traveled 
+        # self.logger.info(f"Ticks: {self.left_ticks[0]}, {self.right_ticks[0]}")
         delta_ticks_left = (self.left_ticks[1] - self.left_ticks[0]) % COUNTER_MAX  # Handle overflow
         delta_ticks_right = (self.right_ticks[1] - self.right_ticks[0]) % COUNTER_MAX  # Handle overflow
-        self.logger.info(f"Delta ticks: {delta_ticks_left}, {delta_ticks_right}")
+        # self.logger.info(f"Delta ticks: {delta_ticks_left}, {delta_ticks_right}")
         dist_left = delta_ticks_left / self.ticks_per_meter
         dist_right = delta_ticks_right / self.ticks_per_meter
         dist_center = (dist_right + dist_left) / 2.0
-        self.logger.info(f"Distances: {dist_left}, {dist_right}, {dist_center}")
+        # self.logger.info(f"Distances: {dist_left}, {dist_right}, {dist_center}")
 
         # Compute the displacement
         d_theta = (dist_right - dist_left) / self.base_width
