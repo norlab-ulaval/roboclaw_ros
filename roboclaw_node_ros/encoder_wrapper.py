@@ -23,14 +23,17 @@ class EncoderWrapper:
         pub_encoders,
         pub_tf
     ):
-        """Encoder Odometry
+        """Encoder Wrapper
 
         Args:
-            ticks_per_meter (float): Ticks per meter, according to the ROS parameters
-            ticks_per_rotation (float): Ticks per wheel rotation, according to the ROS parameters
-            base_width (float): Base width (baseline) of the robot
-            driver (roboclaw_driver.RoboclawDriver): Roboclaw driver
-            parent_node (rclpy.node.Node): RCL Node
+            node (rclpy.node.Node): ROS2 node
+            driver (roboclaw_driver.Roboclaw): Roboclaw driver
+            ticks_per_meter (float): Encoder ticks per meter
+            ticks_per_rotation (float): Encoder ticks per rotation
+            base_width (float): Distance between the two wheels
+            pub_odom (bool): Publish odometry data
+            pub_encoders (bool): Publish encoder data
+            pub_tf (bool): Publish the transform from odom to base_link
         """
         self.ticks_per_meter = ticks_per_meter
         self.ticks_per_rotation = ticks_per_rotation
@@ -86,7 +89,7 @@ class EncoderWrapper:
             if self.pub_encoders: self.publish_encoder_data()
             if self.pub_tf: self.broadcast_tf()
         else:
-            self.logger.warn("Failed to poll encoders")
+            self.logger.warn("Failed to poll encoders.")
 
 
     def poll_encoders(self):

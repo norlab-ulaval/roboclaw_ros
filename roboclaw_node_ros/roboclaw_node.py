@@ -2,10 +2,7 @@
 import diagnostic_updater
 import rclpy
 from geometry_msgs.msg import Twist
-from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from sensor_msgs.msg import BatteryState
-from std_msgs.msg import Float64
 
 from .roboclaw_driver import RoboclawDriver
 from .electrical_wrapper import ElectricalWrapper
@@ -38,7 +35,7 @@ class Movement:
         self.ticks_per_rotation = ticks_per_rotation
         self.clock = parent_clock
         self.logger = parent_logger
-        self.last_set_speed_time = self.clock.now().nanoseconds
+        self.last_cmd_timestamp = self.clock.now().nanoseconds
         self.vr_ticks = 0
         self.vl_ticks = 0
         self.stopped = True
@@ -104,13 +101,6 @@ class RoboclawNode(Node):
         self.create_wrappers()
         self.create_timers()
 
-        self.ERRORS = u.ROBOCLAW_ERRORS
-
-        freq = 30
-        self.rate = self.create_rate(freq)
-        period = 1 / freq
-        self.timer = self.create_timer(period, self.run)
-
         self.updater = diagnostic_updater.Updater(self)
         self.updater.setHardwareID("RoboClaw")
         self.updater.add(diagnostic_updater.FunctionDiagnosticTask("Vitals", self.check_vitals))
@@ -124,12 +114,7 @@ class RoboclawNode(Node):
             self.get_clock(),
             self.get_logger(),
         )
-        self.last_set_speed_time = self.get_clock().now().nanoseconds
-
-        self.cmd_vel_sub = self.create_subscription(
-            Twist, "/cmd_vel", self.cmd_vel_callback, 1
-        )
-        self.get_clock().sleep_for(rclpy.duration.Duration(seconds=1.0))
+        self.last_cmd_timestamp = self.get_clock().now().nanoseconds
 
 
     def read_parameters(self):
@@ -145,7 +130,8 @@ class RoboclawNode(Node):
         self.ticks_per_meter = self.declare_parameter("ticks_per_meter", 4342.2).value
         self.ticks_per_rotation = self.declare_parameter("ticks_per_rotation", 2780).value
         self.base_width = self.declare_parameter("base_width", 0.315).value
-        self.stop_movement = self.declare_parameter("stop_movement", True).value
+        self.stop_if_idle = self.declare_parameter("stop_if_idle", True).value
+        self.idle_timeout = self.declare_parameter("idle_timeout", 1.0).value * 10e9    # in nanoseconds
 
         # Roboclaw params
         self.P = self.declare_parameter("p_constant", 3.0).value
@@ -213,95 +199,42 @@ class RoboclawNode(Node):
             self.publish_encoders,
             self.publish_tf
         )
-        # self.electrical_wrapper = ElectricalWrapper(self)
+        self.electrical_wrapper = ElectricalWrapper(
+            self,
+            self.driver,
+            self.publish_elec
+        )
 
 
     def create_timers(self):
         if self.odom_rate > 0:
             self.odom_timer = self.create_timer(1.0 / self.odom_rate, self.encoder_wrapper.update_and_publish)
-        # if self.elec_rate > 0:
-        #     self.elec_timer = self.create_timer(1.0 / self.elec_rate, self.electrical_wrapper.publish_elec)
+        if self.elec_rate > 0:
+            self.elec_timer = self.create_timer(1.0 / self.elec_rate, self.electrical_wrapper.update_and_publish)
+        self.idle_timer = self.create_timer(1 / 30, self.idle_callback)
 
 
-    def run(self):
-        # stop movement if robot doesn't receive commands for 1 sec
-        if (
-            self.stop_movement
-            and not self.movement.stopped
-            and self.get_clock().now().nanoseconds - self.movement.last_set_speed_time
-            > 10e9
-        ):
-            self.get_logger().info("Did not get command for 1 second, stopping")
+    def idle_callback(self):
+        """Stop the robot if no commands are received for 'idle_timeout' seconds"""
+
+        now = self.get_clock().now().nanoseconds
+        if (self.stop_if_idle and now - self.last_cmd_timestamp > self.idle_timeout):
+
+            self.get_logger().info(f"Did not get command for {self.idle_timeout} second, stopping")
             try:
                 self.driver.SpeedM1M2(0, 0)
+                self.last_cmd_timestamp = now
             except OSError as e:
                 self.get_logger().error("Could not stop")
                 self.get_logger().debug(e)
-            self.movement.stopped = True
-
-        # # Update electrical data
-        # if self.publish_elec:
-        #     try:
-        #         elec_data = self.poll_elec()
-        #     except ValueError:
-        #         pass
-        #     except OSError as e:
-        #         self.get_logger().warn("Electrical OSError: " + str(e.errno))
-        #         self.get_logger().debug(e)
-
-        # publish_time = self.get_clock().now()
-
-        # if self.electrical_wrapper:
-        #     self.electrical_wrapper.publish_elec(publish_time, elec_data)
-
-        self.get_logger().info("Update done moving if cmd")
-        self.movement.run()
-
-
-    def poll_elec(self) -> dict:
-        """Read motors electrical data"""
-        elec_data = {}
-
-        status, *currents = self.driver.ReadCurrents()
-        self.log_elec(status, "currents")
-        elec_data["current"] = {
-            sd: curr / 100 for sd, curr in zip(("left", "right"), currents)
-        }
-
-        status, voltage = self.driver.ReadMainBatteryVoltage()
-        self.log_elec(status, "voltages")
-        elec_data["voltage"] = voltage / 10
-
-        status, logicbatt = self.driver.ReadLogicBatteryVoltage()
-        self.log_elec(status, "logic voltages")
-        elec_data["logicbatt"] = logicbatt / 10
-
-        status, *pwms = self.driver.ReadPWMs()
-        self.log_elec(status, "PWMs")
-        elec_data["pwm"] = {
-            sd: pwm / 327.67 for sd, pwm in zip(("left", "right"), pwms)
-        }
-
-        status, temperature = self.driver.ReadTemp()
-        self.log_elec(status, "temperature")
-        elec_data["temperature"] = temperature / 10
-
-        return elec_data
-
-
-    def log_elec(self, status: int, name: str):
-        if status:
-            self.get_logger().info(f"Got {name.lower()} data")
-        else:
-            self.get_logger().info(f"Missing {name.lower()}")
 
 
     def cmd_vel_callback(self, twist):
-        self.movement.last_set_speed_time = self.get_clock().now().nanoseconds
+        self.movement.last_cmd_timestamp = self.get_clock().now().nanoseconds
         self.movement.twist = twist
+        self.movement.run()
 
 
-    # TODO: Need to make this work when more than one error is raised
     def check_vitals(self, stat):
         try:
             status = self.driver.ReadError()[1]
@@ -309,22 +242,8 @@ class RoboclawNode(Node):
             self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
             self.get_logger().debug(e)
             return
-        state, message = self.ERRORS[status]
+        state, message = u.ROBOCLAW_ERRORS[status]
         stat.summary(state, message)
-        try:
-            stat.add(
-                "Main Batt V:",
-                str(float(self.driver.ReadMainBatteryVoltage()[1] / 10)),
-            )
-            stat.add(
-                "Logic Batt V:",
-                str(float(self.driver.ReadLogicBatteryVoltage()[1] / 10)),
-            )
-            stat.add("Temp1 C:", str(float(self.driver.ReadTemp()[1] / 10)))
-            stat.add("Temp2 C:", str(float(self.driver.ReadTemp2()[1] / 10)))
-        except OSError as e:
-            self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
-            self.get_logger().debug(e)
         return stat
 
 
