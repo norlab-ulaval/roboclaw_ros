@@ -107,8 +107,8 @@ class EncoderWrapper:
             self.right_ticks = [self.right_ticks[1], ticks1]
             self.left_ticks = [self.left_ticks[1], ticks2]
         if status2 == 1:
-            self.right_velocity = speed1 if speed1 < COUNTER_MAX / 2 else speed1 - COUNTER_MAX
-            self.left_velocity = speed2 if speed2 < COUNTER_MAX / 2 else speed2 - COUNTER_MAX
+            self.right_velocity = speed1
+            self.left_velocity = speed2
         
         return status1 == 1 and status2 == 1
 
