@@ -23,7 +23,7 @@ class ElectricalWrapper:
         self.node = node
         self.clock = self.node.get_clock()
         self.logger = self.node.get_logger()
-        self.pub_elec = pub_elec
+        self.PUB_ELEC = pub_elec
 
         # Electrical data
         self.timestamp = self.clock.now()
@@ -42,7 +42,7 @@ class ElectricalWrapper:
         """Update and publish electrical data"""
 
         if self.poll_electrical_data():
-            if self.pub_elec: self.publish_elec()
+            if self.PUB_ELEC: self.publish_elec()
         else:
             self.logger.warn("Failed to poll electrical data.")
 
