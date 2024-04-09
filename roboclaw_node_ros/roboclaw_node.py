@@ -4,7 +4,8 @@ import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 
-from .roboclaw_driver import RoboclawDriver
+# from tcr_roboclaw import Roboclaw
+from .roboclaw_driver import RoboclawDriver as Roboclaw
 from .electrical_wrapper import ElectricalWrapper
 from .encoder_wrapper import EncoderWrapper
 from . import utils as u
@@ -62,6 +63,7 @@ class RoboclawNode(Node):
         self.BASE_WIDTH = self.init_parameter("base_width", 0.315)
 
         # Roboclaw params
+        self.custom_pid = self.init_parameter("custom_pid", True)
         self.P = self.init_parameter("p_constant", 3.0)
         self.I = self.init_parameter("i_constant", 0.42)
         self.D = self.init_parameter("d_constant", 0.0)
@@ -94,6 +96,7 @@ class RoboclawNode(Node):
         self.stop_if_idle = self.get_parameter("stop_if_idle").value
         self.idle_timeout = self.get_parameter("idle_timeout").value
 
+        self.custom_pid = self.get_parameter("custom_pid").value
         self.P = self.get_parameter("p_constant").value
         self.I = self.get_parameter("i_constant").value
         self.D = self.get_parameter("d_constant").value
@@ -106,7 +109,8 @@ class RoboclawNode(Node):
 
         try:
             self.get_logger().info("Connecting to Roboclaw at " + dev_name + " with address " + str(address))
-            driver = RoboclawDriver(dev_name, baud_rate, address)
+            driver = Roboclaw(dev_name, baud_rate, address)
+            # driver.open()
             self.get_logger().info("Connected!")
         except Exception as e:
             self.get_logger().fatal("Could not connect to Roboclaw at " + dev_name + " with address " + str(address))
@@ -138,8 +142,9 @@ class RoboclawNode(Node):
         """Configure the Roboclaw device with the ROS parameters"""
 
         # Set PID parameters
-        self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
-        self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
+        if self.custom_pid:
+            self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
+            self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
 
 
     def create_subscribers(self):

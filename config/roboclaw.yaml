@@ -16,6 +16,7 @@ roboclaw_node:
     base_width: 0.315
 
     # PID parameters
+    custom_pid: True
     p_constant: 3.0
     i_constant: 0.42
     d_constant: 0.0
