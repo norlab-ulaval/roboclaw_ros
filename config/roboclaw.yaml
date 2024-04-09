@@ -22,7 +22,7 @@ roboclaw_node:
     qpps: 6000
 
     # Publish parameters
-    odom_rate: 10
+    odom_rate: 30
     elec_rate: 10
     publish_odom: True
     publish_encoders: True
