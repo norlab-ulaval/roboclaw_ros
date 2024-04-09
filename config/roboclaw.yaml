@@ -13,7 +13,7 @@ roboclaw_node:
     # Odometry parameters
     ticks_per_meter: 3802.4
     ticks_per_rotation: 2780
-    base_width: 0.315
+    base_width: 0.52  # before: 0.315
 
     # PID parameters
     custom_pid: True
@@ -23,7 +23,7 @@ roboclaw_node:
     qpps: 6000
 
     # Publish parameters
-    odom_rate: 30
+    odom_rate: 20
     elec_rate: 10
     publish_odom: True
     publish_encoders: True

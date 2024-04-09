@@ -1,10 +1,10 @@
-import math
 from math import cos, pi, sin
 
+from tcr_roboclaw import Roboclaw
+from rclpy.node import Node
 from geometry_msgs.msg import Quaternion, TransformStamped
 from nav_msgs.msg import Odometry
-from rclpy.time import Time
-from std_msgs.msg import Float64
+from norlab_custom_interfaces.msg import EncoderState
 from tf_transformations import quaternion_from_euler
 from tf2_ros import TransformBroadcaster
 
@@ -14,20 +14,20 @@ class EncoderWrapper:
 
     def __init__(
         self,
-        node,
-        driver,
-        ticks_per_meter,
-        ticks_per_rotation,
-        base_width,
-        pub_odom,
-        pub_encoders,
-        pub_tf
+        node: Node,
+        driver: Roboclaw,
+        ticks_per_meter: float,
+        ticks_per_rotation: float,
+        base_width: float,
+        pub_odom: bool,
+        pub_encoders: bool,
+        pub_tf: bool
     ):
         """Encoder Wrapper
 
         Args:
             node (rclpy.node.Node): ROS2 node
-            driver (roboclaw_driver.Roboclaw): Roboclaw driver
+            driver (tcr_roboclaw.Roboclaw): Roboclaw driver
             ticks_per_meter (float): Encoder ticks per meter
             ticks_per_rotation (float): Encoder ticks per rotation
             base_width (float): Distance between the two wheels
@@ -52,8 +52,8 @@ class EncoderWrapper:
         self.timestamp = self.clock.now()
         self.left_ticks = [0, 0]
         self.right_ticks = [0, 0]
-        self.left_angular_velocity = 0
-        self.right_angular_velocity = 0
+        self.left_velocity = 0
+        self.right_velocity = 0
         self.poll_encoders()
 
         # Odometry data
@@ -65,8 +65,8 @@ class EncoderWrapper:
 
         # Publishers
         # TODO: Topics should be parameters
-        self.left_encoder_pub = self.node.create_publisher(Float64, "/motors/left/velocity", 10)
-        self.right_encoder_pub = self.node.create_publisher(Float64, "/motors/right/velocity", 10)
+        self.left_encoder_pub = self.node.create_publisher(EncoderState, "/motors/left/encoder", 10)
+        self.right_encoder_pub = self.node.create_publisher(EncoderState, "/motors/right/encoder", 10)
         self.odom_pub = self.node.create_publisher(Odometry, "/motors/odometry", 10)
         self.tf_broadcaster = TransformBroadcaster(self.node)
 
@@ -107,8 +107,8 @@ class EncoderWrapper:
             self.right_ticks = [self.right_ticks[1], ticks1]
             self.left_ticks = [self.left_ticks[1], ticks2]
         if status2 == 1:
-            self.right_angular_velocity = speed1 / self.TICKS_PER_ROTATION
-            self.left_angular_velocity = speed2 / self.TICKS_PER_ROTATION
+            self.right_velocity = speed1 if speed1 < COUNTER_MAX / 2 else speed1 - COUNTER_MAX
+            self.left_velocity = speed2 if speed2 < COUNTER_MAX / 2 else speed2 - COUNTER_MAX
         
         return status1 == 1 and status2 == 1
 
@@ -116,15 +116,24 @@ class EncoderWrapper:
     def update_odometry(self):
         """Update the odometry estimation"""
 
+        # Compute the ticks difference (handle overflow)
+        delta_ticks_left = self.left_ticks[1] - self.left_ticks[0]
+        delta_ticks_right = self.right_ticks[1] - self.right_ticks[0]
+
+        # Handle overflow and underflow
+        if delta_ticks_left < -COUNTER_MAX / 2:
+            delta_ticks_left += COUNTER_MAX
+        elif delta_ticks_left > COUNTER_MAX / 2:
+            delta_ticks_left -= COUNTER_MAX
+        if delta_ticks_right < -COUNTER_MAX / 2:
+            delta_ticks_right += COUNTER_MAX
+        elif delta_ticks_right > COUNTER_MAX / 2:
+            delta_ticks_right -= COUNTER_MAX
+
         # Compute the traveled distance
-        self.logger.info(f"Ticks: {self.left_ticks[0]}, {self.right_ticks[0]}")
-        delta_ticks_left = (self.left_ticks[1] - self.left_ticks[0]) % COUNTER_MAX  # Handle overflow   # NOT WORKING on reverse
-        delta_ticks_right = (self.right_ticks[1] - self.right_ticks[0]) % COUNTER_MAX  # Handle overflow
-        self.logger.info(f"Delta ticks: {delta_ticks_left}, {delta_ticks_right}, ticks per meter: {self.TICKS_PER_METER}")
         dist_left = delta_ticks_left / self.TICKS_PER_METER
         dist_right = delta_ticks_right / self.TICKS_PER_METER
         dist_center = (dist_right + dist_left) / 2.0
-        self.logger.info(f"Distances: {dist_left}, {dist_right}, {dist_center}")
 
         # Compute the displacement
         d_theta = (dist_right - dist_left) / self.BASE_WIDTH
@@ -137,8 +146,8 @@ class EncoderWrapper:
         self.pose_theta = self.normalize_angle(self.pose_theta + d_theta)
 
         # Compute the linear and angular velocities
-        vel_left = self.left_angular_velocity / self.TICKS_PER_METER
-        vel_right = self.right_angular_velocity / self.TICKS_PER_METER
+        vel_left = self.left_velocity / self.TICKS_PER_METER
+        vel_right = self.right_velocity / self.TICKS_PER_METER
         self.vel_x = (vel_left + vel_right) / 2.0
         self.vel_theta = (vel_right - vel_left) / self.BASE_WIDTH
 
@@ -168,13 +177,19 @@ class EncoderWrapper:
     def publish_encoder_data(self):
         """Publish the encoder data to the ROS network"""
 
-        left_enc = Float64()
-        left_enc.data = self.left_angular_velocity
-        right_enc = Float64()
-        right_enc.data = self.right_angular_velocity
+        encoder_state = EncoderState()
+        encoder_state.header.stamp = self.timestamp.to_msg()
+        encoder_state.header.frame_id = "base_link"
+        encoder_state.ticks_per_rotation = float(self.TICKS_PER_ROTATION)
+        encoder_state.ticks_per_meter = float(self.TICKS_PER_METER)
 
-        self.left_encoder_pub.publish(left_enc)
-        self.right_encoder_pub.publish(right_enc)
+        encoder_state.position = self.left_ticks[1]
+        encoder_state.velocity = float(self.left_velocity)
+        self.left_encoder_pub.publish(encoder_state)
+
+        encoder_state.position = self.right_ticks[1]
+        encoder_state.velocity = float(self.right_velocity)     
+        self.right_encoder_pub.publish(encoder_state)
 
     
     def broadcast_tf(self):
@@ -189,7 +204,7 @@ class EncoderWrapper:
         t.transform.translation.y = self.pose_y
         t.transform.translation.z = 0.0
 
-        quat = quaternion_from_euler(0, 0, -self.pose_theta)
+        quat = quaternion_from_euler(0, 0, self.pose_theta)
         t.transform.rotation = Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
 
         self.tf_broadcaster.sendTransform(t)

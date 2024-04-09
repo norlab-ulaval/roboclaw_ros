@@ -71,10 +71,10 @@ class RoboclawNode(Node):
         # Publishing params
         self.ODOM_RATE = self.init_parameter("odom_rate", 10)
         self.ELEC_RATE = self.init_parameter("elec_rate", 1)
-        self.PUBLISH_ODOM = self.init_parameter("pub_odom", True)
-        self.PUBLISH_ENCODERS = self.init_parameter("pub_encoders", True)
-        self.PUBLISH_ELEC = self.init_parameter("pub_elec", True)
-        self.PUBLISH_TF = self.init_parameter("pub_tf", False)
+        self.PUBLISH_ODOM = self.init_parameter("publish_odom", True)
+        self.PUBLISH_ENCODERS = self.init_parameter("publish_encoders", True)
+        self.PUBLISH_ELEC = self.init_parameter("publish_elec", True)
+        self.PUBLISH_TF = self.init_parameter("publish_tf", False)
 
         # TODO: add a parameter for the acceleration (tried but it didn't work)
 

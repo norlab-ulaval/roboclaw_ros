@@ -19,7 +19,8 @@
   <exec_depend>tf2</exec_depend>
   <exec_depend>tf_transformations</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
-  <depend>roboclaw_driver</depend>
+
+  <depend>norlab_custom_interfaces</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

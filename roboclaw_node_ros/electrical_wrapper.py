@@ -1,20 +1,20 @@
-from rclpy.time import Time
-from sensor_msgs.msg import BatteryState
-
+from norlab_custom_interfaces.msg import MotorState
+from tcr_roboclaw import Roboclaw
+from rclpy.node import Node
 
 class ElectricalWrapper:
 
     def __init__(
         self,
-        node,
-        driver,
-        pub_elec
+        node: Node,
+        driver: Roboclaw,
+        pub_elec: bool
     ):
         """Electrical Wrapper
 
         Args:
             node (rclpy.node.Node): ROS2 node
-            driver (roboclaw_driver.Roboclaw): Roboclaw driver
+            driver (tcr_roboclaw.Roboclaw): Roboclaw driver
             pub_elec (bool): Publish electrical data
         """
 
@@ -34,8 +34,8 @@ class ElectricalWrapper:
         self.poll_electrical_data()
 
         # Publishers
-        self.left_elec_pub = self.node.create_publisher(BatteryState, "/motors/left/electrical", 1)
-        self.right_elec_pub = self.node.create_publisher(BatteryState, "/motors/right/electrical", 1)
+        self.left_elec_pub = self.node.create_publisher(MotorState, "/motors/left/electrical", 1)
+        self.right_elec_pub = self.node.create_publisher(MotorState, "/motors/right/electrical", 1)
 
 
     def update_and_publish(self):
@@ -73,24 +73,19 @@ class ElectricalWrapper:
 
 
     def publish_elec(self):
-        """Publish electrical data in two battery states messages
-
-        Main Battery Voltage => voltage
-        Current => current
-        PWM => percentage
-        Temperature => temperature
+        """Publish electrical data in two MotorState messages
         """
 
-        bs = BatteryState()
-        bs.header.stamp = self.timestamp.to_msg()
-        bs.header.frame_id = "base_link"
-        bs.voltage = self.voltage
-        bs.temperature = self.temperature 
+        motor_state = MotorState()
+        motor_state.header.stamp = self.timestamp.to_msg()
+        motor_state.header.frame_id = "base_link"
+        motor_state.voltage = self.voltage
+        motor_state.temperature = self.temperature 
 
-        bs.current = self.currents[0]
-        bs.percentage = self.duty_cycles[0]
-        self.right_elec_pub.publish(bs)
+        motor_state.current = self.currents[0]
+        motor_state.duty = self.duty_cycles[0]
+        self.right_elec_pub.publish(motor_state)
 
-        bs.current = self.currents[1]
-        bs.percentage = self.duty_cycles[1]
-        self.left_elec_pub.publish(bs)
+        motor_state.current = self.currents[1]
+        motor_state.duty = self.duty_cycles[1]
+        self.left_elec_pub.publish(motor_state)

@@ -11,6 +11,15 @@ Thanks to Brad Bazemore ([sonyccd](https://github.com/sonyccd)) for developing t
 
 This is a ROS1/ROS2 driver for the RoboClaw motor controllers made by [Basicmicro Motion Control](https://www.basicmicro.com). It is actively maintained by the [Northern Robotics Laboratory](http://norlab.ulaval.ca/) of Université Laval.
 
+## Dependencies
+
+This ROS driver is using the python driver developped by [Team Chat Robotique](https://gitlab.com/team-chat-robotique/libraries/team-chat-robotique-roboclaw-python) (Thanks!). Install it with pip :
+
+```sh
+pip install tcr-roboclaw
+```
+
+
 ## Before you begin
 
 For the ROS1 (`melodic`) version : [melodic](https://github.com/norlab-ulaval/roboclaw_ros/tree/melodic)
@@ -28,7 +37,7 @@ combination are functioning properly before using the auto tune feature.
 
 ## Usage instructions
 
-Just clone the repo into your colcon workspace. It contains the ROS2 package and the motor controller driver.  Remember to make sure ROS2 has permissions to use the dev port you give it.
+Just clone the repo into your colcon workspace.  Remember to make sure ROS2 has permissions to use the dev port you give it.
 
 ```sh
 cd <workspace>/src
@@ -43,16 +52,29 @@ ros2 launch roboclaw_node_ros roboclaw_node_launch.py
 
 The launch file can be configured at the command line with arguments, by changing the value in the launch file or through the `ros2 param` server.
 
-| Parameter         | Default        | Definition                                                    |
-| ----------------- | -------------- | ------------------------------------------------------------- |
-| `dev`             | `/dev/ttyACM0` | Dev that is the Roboclaw                                      |
-| `baud`            | `115200`       | Baud rate the Roboclaw is configured for                      |
-| `address`         | `128`          | The address the Roboclaw is set to, 128 is 0x80               |
-| `max_speed`       | `2.0`          | Max speed allowed for motors in meters per second             |
-| `ticks_per_meter` | `4342.2`       | The number of encoder ticks per meter of movement             |
-| `base_width`      | `0.315`        | Width from one wheel edge to another in meters                |
-| `pub_odom`        | `true`         | Publishes Odometry if set to true                             |
-| `stop_movement`   | `true`         | Stops movement if no velocity commands are received for 1 sec |
+| Parameter             | Default        | Definition                                                             |
+| --------------------- | -------------- | ---------------------------------------------------------------------- |
+| `dev`                 | `/dev/ttyACM0` | Dev that is the Roboclaw                                               |
+| `baud`                | `115200`       | Baud rate the Roboclaw is configured for                               |
+| `address`             | `128`          | The address the Roboclaw is set to, 128 is 0x80                        |
+| `max_speed_linear`    | `2.0`          | Max linear speed allowed for motors in meters per second               |
+| `max_speed_angular`   | `2.0`          | Max angular speed allowed for motors in meters per second              |
+| `stop_if_idle`        | `true`         | Stops movement if no velocity commands are received for `idle_timeout` |
+| `idle_timeout`        | `1.0`          | Duration, in seconds, after which motors are stopped when idle         |
+| `ticks_per_meter`     | `4000`         | The number of encoder ticks per meter of movement                      |
+| `ticks_per_rotation`  | `2000`         | The number of encoder ticks per rotation of wheel                      |
+| `base_width`          | `0.315`        | Width from one wheel center to another, in meters                      |
+| `custom_pid`          | `true`         | Whether the driver should overwrite the PID parameters or not          |
+| `p_constant`          | `3.0`          | Proportional gain of PID controller (unused if `custom_pid` is false)  |
+| `i_constant`          | `0.42`         | Integral gain of PID controller (unused if `custom_pid` is false)      |
+| `d_constant`          | `0.0`          | Derivative gain of PID controller (unused if `custom_pid` is false)    |
+| `qpps`                | `6000`         | Maximum speed of motor, in ticks/sec (unused if `custom_pid` is false) |
+| `odom_rate`           | `30`           | Rate of polling and publishing odometry data                           |
+| `elec_rate`           | `10`           | Rate of polling and publishing electrical data                         |
+| `publish_odom`        | `true`         | Publishes Odometry if set to true                                      |
+| `publish_encoders`    | `true`         | Publishes EncoderState if set to true                                  |
+| `publish_elec`        | `true`         | Publishes MotorState if set to true                                    |
+| `publish_tf`          | `false`        | Broadcasts TF from `odom` to `base_link` if set to true                |
 
 ## Topics
 
@@ -63,5 +85,11 @@ Velocity commands for the mobile base.
 
 ### Published
 
-`/odom` [(nav_msgs/Odometry)](https://github.com/ros2/common_interfaces/blob/humble/nav_msgs/msg/Odometry.msg)
+`/motors/odometry` [(nav_msgs/Odometry)](https://github.com/ros2/common_interfaces/blob/humble/nav_msgs/msg/Odometry.msg)
 Odometry output from the mobile base.
+
+`/motors/{left/right}/encoder` [(norlab_custom_interfaces/EncoderState)](https://github.com/norlab-ulaval/norlab_custom_interfaces/blob/main/msg/EncoderState.msg)
+Encoder state for the left and right motors.
+
+`/motors/{left/right}/electrical` [(norlab_custom_interfaces/MotorState)](https://github.com/norlab-ulaval/norlab_custom_interfaces/blob/main/msg/MotorState.msg)
+Electrical data for both motors. 
