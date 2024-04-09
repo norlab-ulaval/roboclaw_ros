@@ -4,8 +4,7 @@ import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 
-# from tcr_roboclaw import Roboclaw
-from .roboclaw_driver import RoboclawDriver as Roboclaw
+from tcr_roboclaw import Roboclaw
 from .electrical_wrapper import ElectricalWrapper
 from .encoder_wrapper import EncoderWrapper
 from . import utils as u
@@ -110,7 +109,7 @@ class RoboclawNode(Node):
         try:
             self.get_logger().info("Connecting to Roboclaw at " + dev_name + " with address " + str(address))
             driver = Roboclaw(dev_name, baud_rate, address)
-            # driver.open()
+            driver.open()
             self.get_logger().info("Connected!")
         except Exception as e:
             self.get_logger().fatal("Could not connect to Roboclaw at " + dev_name + " with address " + str(address))
