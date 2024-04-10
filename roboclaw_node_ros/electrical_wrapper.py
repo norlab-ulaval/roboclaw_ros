@@ -1,56 +1,92 @@
-from rclpy.time import Time
-from sensor_msgs.msg import BatteryState
+from norlab_custom_interfaces.msg import MotorState
+from tcr_roboclaw import Roboclaw
+from rclpy.node import Node
 
 
 class ElectricalWrapper:
-    def __init__(self, parent_node):
-        """Roboclaw Electrical Data
+
+    def __init__(self, node: Node, driver: Roboclaw, pub_elec: bool):
+        """Electrical Wrapper
 
         Args:
-            parent_node (rclpy.node.Node): RCL Node
+            node (rclpy.node.Node): ROS 2 node
+            driver (tcr_roboclaw.Roboclaw): RoboClaw driver
+            pub_elec (bool): Publish electrical data
         """
+
         # Node parameters
-        self.parent_node = parent_node
-        self.clock = self.parent_node.get_clock()
-        self.logger = self.parent_node.get_logger()
-        # Electricity publishers
-        self.left_elec_pub = self.parent_node.left_elec_pub
-        self.right_elec_pub = self.parent_node.right_elec_pub
+        self.driver = driver
+        self.node = node
+        self.clock = self.node.get_clock()
+        self.logger = self.node.get_logger()
+        self.PUB_ELEC = pub_elec
+
         # Electrical data
-        self.motor_elec = {}
+        self.timestamp = self.clock.now()
+        self.voltage = 0.0
+        self.currents = [0.0, 0.0]
+        self.temperature = 0.0
+        self.duty_cycles = [0.0, 0.0]
+        self.poll_electrical_data()
 
-    def publish_elec(self, cur_time: Time, elec_data: dict):
-        """Publish elec in two battery states messages
+        # Publishers
+        self.left_elec_pub = self.node.create_publisher(
+            MotorState,
+            "/motors/left/electrical",
+            1,
+        )
+        self.right_elec_pub = self.node.create_publisher(
+            MotorState,
+            "/motors/right/electrical",
+            1,
+        )
 
-        Main Battery Voltage => voltage
-        Current => current
-        Logic Battery Voltage => charge
-        PWM => percentage
-        Temperature => temperature
+    def update_and_publish(self):
+        """Update and publish electrical data"""
 
-        Args:
-            cur_time (Time): Current time
-            elec_data: Electrical data from the RoboClaw
-        """
+        if self.poll_electrical_data():
+            if self.PUB_ELEC:
+                self.publish_elec()
+        else:
+            self.logger.warn("Failed to poll electrical data.")
 
-        side = "left"
-        bs = BatteryState()
-        bs.header.stamp = cur_time.to_msg()
-        bs.header.frame_id = "base_link"
-        bs.voltage = elec_data["voltage"]
-        bs.current = elec_data["current"][side]
-        bs.percentage = elec_data["pwm"][side]
-        bs.charge = elec_data["logicbatt"]
-        bs.temperature = elec_data["temperature"]
-        self.left_elec_pub.publish(bs)
+    def poll_electrical_data(self):
+        """Poll electrical data from the Roboclaw"""
 
-        side = "right"
-        bs = BatteryState()
-        bs.header.stamp = cur_time.to_msg()
-        bs.header.frame_id = "base_link"
-        bs.voltage = elec_data["voltage"]
-        bs.current = elec_data["current"][side]
-        bs.percentage = elec_data["pwm"][side]
-        bs.charge = elec_data["logicbatt"]
-        bs.temperature = elec_data["temperature"]
-        self.right_elec_pub.publish(bs)
+        try:
+            self.timestamp = self.clock.now()
+            status1, *currents = self.driver.ReadCurrents()
+            status2, voltage = self.driver.ReadMainBatteryVoltage()
+            status3, *pwms = self.driver.ReadPWMs()
+            status4, temp = self.driver.ReadTemp()
+        except Exception as e:
+            self.logger.warn("Read electrical data error: " + str(e.errno))
+            self.logger.debug(e)
+
+        if status1 == 1:
+            self.currents = [curr / 100 for curr in currents]
+        if status2 == 1:
+            self.voltage = voltage / 10
+        if status3 == 1:
+            self.duty_cycles = [pwm / 327.67 for pwm in pwms]
+        if status4 == 1:
+            self.temperature = temp / 10
+
+        return status1 and status2 and status3 and status4
+
+    def publish_elec(self):
+        """Publish electrical data in two MotorState messages"""
+
+        motor_state = MotorState()
+        motor_state.header.stamp = self.timestamp.to_msg()
+        motor_state.header.frame_id = "base_link"
+        motor_state.voltage = self.voltage
+        motor_state.temperature = self.temperature
+
+        motor_state.current = self.currents[0]
+        motor_state.duty = self.duty_cycles[0]
+        self.right_elec_pub.publish(motor_state)
+
+        motor_state.current = self.currents[1]
+        motor_state.duty = self.duty_cycles[1]
+        self.left_elec_pub.publish(motor_state)
