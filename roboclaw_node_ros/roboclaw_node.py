@@ -109,27 +109,19 @@ class RoboclawNode(Node):
 
         try:
             self.get_logger().info(
-                "Connecting to Roboclaw at "
-                + dev_name
-                + " with address "
-                + str(address)
+                f"Connecting to device {dev_name} with address {str(address)}"
             )
             driver = Roboclaw(dev_name, baud_rate, address)
             driver.open()
             self.get_logger().info("Connected!")
         except Exception as e:
-            self.get_logger().fatal(
-                "Could not connect to Roboclaw at "
-                + dev_name
-                + " with address "
-                + str(address)
-            )
+            self.get_logger().fatal("Could not connect to device.")
             self.get_logger().debug(e)
             self.shutdown("Could not connect to Roboclaw")
 
         try:
             _, version = driver.ReadVersion()
-            self.get_logger().info("Roboclaw version: " + str(version))
+            self.get_logger().info(f"Roboclaw version: {str(version)}")
         except Exception as e:
             self.get_logger().warn("Problem getting Roboclaw version")
             self.get_logger().debug(e)
@@ -143,7 +135,7 @@ class RoboclawNode(Node):
             self.driver.SpeedM1M2(0, 0)
             self.driver.ResetEncoders()
         except OSError as e:
-            self.get_logger().warn("Device reset OSError: " + str(e.errno))
+            self.get_logger().warn(f"Device reset OSError: {str(e.errno)}")
             self.get_logger().debug(e)
 
     def configure_device(self):
