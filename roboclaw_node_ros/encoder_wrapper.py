@@ -1,4 +1,4 @@
-from math import cos, pi, sin
+from math import cos, pi, sin, fmod
 
 from tcr_roboclaw import Roboclaw
 from rclpy.node import Node
@@ -8,7 +8,8 @@ from norlab_custom_interfaces.msg import EncoderState
 from tf_transformations import quaternion_from_euler
 from tf2_ros import TransformBroadcaster
 
-COUNTER_MAX = 2 ** 32
+COUNTER_MAX = 2**32
+
 
 class EncoderWrapper:
 
@@ -21,12 +22,12 @@ class EncoderWrapper:
         base_width: float,
         pub_odom: bool,
         pub_encoders: bool,
-        pub_tf: bool
+        pub_tf: bool,
     ):
         """Encoder Wrapper
 
         Args:
-            node (rclpy.node.Node): ROS2 node
+            node (rclpy.node.Node): ROS 2 node
             driver (tcr_roboclaw.Roboclaw): Roboclaw driver
             ticks_per_meter (float): Encoder ticks per meter
             ticks_per_rotation (float): Encoder ticks per rotation
@@ -65,32 +66,36 @@ class EncoderWrapper:
 
         # Publishers
         # TODO: Topics should be parameters
-        self.left_encoder_pub = self.node.create_publisher(EncoderState, "/motors/left/encoder", 10)
-        self.right_encoder_pub = self.node.create_publisher(EncoderState, "/motors/right/encoder", 10)
+        self.left_encoder_pub = self.node.create_publisher(
+            EncoderState,
+            "/motors/left/encoder",
+            10,
+        )
+        self.right_encoder_pub = self.node.create_publisher(
+            EncoderState,
+            "/motors/right/encoder",
+            10,
+        )
         self.odom_pub = self.node.create_publisher(Odometry, "/motors/odometry", 10)
         self.tf_broadcaster = TransformBroadcaster(self.node)
 
-
     @staticmethod
     def normalize_angle(angle):
-        while angle > pi:
-            angle -= 2.0 * pi
-        while angle < -pi:
-            angle += 2.0 * pi
-        return angle
-
+        return fmod(angle + pi, 2.0 * pi) - pi
 
     def update_and_publish(self):
         """Update the odometry and publish the data"""
 
         if self.poll_encoders():
             self.update_odometry()
-            if self.PUB_ODOM: self.publish_odometry()
-            if self.PUB_ENCODERS: self.publish_encoder_data()
-            if self.PUB_TF: self.broadcast_tf()
+            if self.PUB_ODOM:
+                self.publish_odometry()
+            if self.PUB_ENCODERS:
+                self.publish_encoder_data()
+            if self.PUB_TF:
+                self.broadcast_tf()
         else:
             self.logger.warn("Failed to poll encoders.")
-
 
     def poll_encoders(self):
         """Poll the encoder data from the hardware"""
@@ -103,15 +108,15 @@ class EncoderWrapper:
             self.logger.warn("Read encoders error: " + str(e.errno))
             self.logger.debug(e)
 
+        # Left motor encoder : M2 / Right motor encoder : M1
         if status1 == 1:
             self.right_ticks = [self.right_ticks[1], ticks1]
             self.left_ticks = [self.left_ticks[1], ticks2]
         if status2 == 1:
             self.right_velocity = speed1
             self.left_velocity = speed2
-        
-        return status1 == 1 and status2 == 1
 
+        return status1 and status2
 
     def update_odometry(self):
         """Update the odometry estimation"""
@@ -151,7 +156,6 @@ class EncoderWrapper:
         self.vel_x = (vel_left + vel_right) / 2.0
         self.vel_theta = (vel_right - vel_left) / self.BASE_WIDTH
 
-
     def publish_odometry(self):
         """Publish odometry data to the ROS network"""
 
@@ -165,14 +169,18 @@ class EncoderWrapper:
         odom.pose.pose.position.z = 0.0
 
         quat = quaternion_from_euler(0, 0, self.pose_theta)
-        odom.pose.pose.orientation = Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
+        odom.pose.pose.orientation = Quaternion(
+            x=quat[0],
+            y=quat[1],
+            z=quat[2],
+            w=quat[3],
+        )
 
         odom.twist.twist.linear.x = self.vel_x
         odom.twist.twist.linear.y = 0.0
         odom.twist.twist.angular.z = self.vel_theta
 
         self.odom_pub.publish(odom)
-
 
     def publish_encoder_data(self):
         """Publish the encoder data to the ROS network"""
@@ -188,10 +196,9 @@ class EncoderWrapper:
         self.left_encoder_pub.publish(encoder_state)
 
         encoder_state.position = self.right_ticks[1]
-        encoder_state.velocity = float(self.right_velocity)     
+        encoder_state.velocity = float(self.right_velocity)
         self.right_encoder_pub.publish(encoder_state)
 
-    
     def broadcast_tf(self):
         """Broadcast the transform from odom to base_link"""
 
