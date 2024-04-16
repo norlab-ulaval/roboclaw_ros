@@ -1,11 +1,11 @@
 roboclaw_node:
   ros__parameters:
     dev: '/dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_2x30A-if00'
-    baud: 115200
+    baud: 460800
     address: 128
 
     # Movement parameters
-    max_speed_linear: 2.0
+    max_speed_linear: 4.0
     max_speed_angular: 1.0
     stop_if_idle: True
     idle_timeout: 0.5
