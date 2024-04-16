@@ -146,6 +146,9 @@ class RoboclawNode(Node):
             self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
             self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
 
+        #self.driver.SetM1DefaultAccel(655000)
+        #self.driver.SetM2DefaultAccel(655000)
+
     def create_subscribers(self):
         """Create subscribers for the node"""
 
@@ -247,12 +250,12 @@ class RoboclawNode(Node):
 
         try:
             status = self.driver.ReadError()[1]
-        except OSError as e:
-            self.get_logger().warn("Diagnostics OSError: " + str(e.errno))
+            state, message = u.ROBOCLAW_ERRORS[status]
+            stat.summary(state, message)
+        except Exception as e:
+            self.get_logger().warn("Diagnostics error: " + str(e))
             self.get_logger().debug(e)
             return
-        state, message = u.ROBOCLAW_ERRORS[status]
-        stat.summary(state, message)
         return stat
 
     # TODO: need clean shutdown so motors stop even if new msgs are arriving
