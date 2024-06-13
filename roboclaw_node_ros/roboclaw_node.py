@@ -253,8 +253,8 @@ class RoboclawNode(Node):
             state, message = u.ROBOCLAW_ERRORS[status]
             stat.summary(state, message)
         except Exception as e:
-            self.get_logger().warn("Diagnostics error: " + str(hex(e)))
             self.get_logger().warn("Got status: " + str(hex(status)))
+            self.get_logger().warn("Diagnostics error: " + str(e))
             self.get_logger().debug(e)
             return
         return stat
