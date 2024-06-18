@@ -250,8 +250,9 @@ class RoboclawNode(Node):
 
         try:
             status = self.driver.ReadError()[1]
-            state, message = u.ROBOCLAW_ERRORS[status]
-            stat.summary(state, message)
+            statuses = u.decipher_rclaw_status(status)
+            for state, message in statuses:
+                stat.summary(state, message)
         except Exception as e:
             self.get_logger().warn("Got status: " + str(hex(status)))
             self.get_logger().warn("Diagnostics error: " + str(e))
@@ -263,7 +264,7 @@ class RoboclawNode(Node):
     def shutdown(self, str_msg):
         """Shutdown the node"""
 
-        self.get_logger().info("Shutting down :" + str_msg)
+        self.get_logger().info("Shutting down: " + str_msg)
         try:
             self.driver.SpeedM1M2(0, 0)
         except OSError:
