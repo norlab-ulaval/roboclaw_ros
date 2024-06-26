@@ -70,5 +70,6 @@ def decipher_rclaw_status(status: int) -> list[tuple[bytes, str]]:
         list[tuple[bytes, str]]: List of RoboClaw error statuses
     """
     status_bits = tuple(key for key in ROBOCLAW_ERRORS.keys() if (status & key) > 0)
+    status_bits = status_bits if len(status_bits) > 0 else (0,)
     statuses = [ROBOCLAW_ERRORS[sbit] for sbit in status_bits]
     return statuses
