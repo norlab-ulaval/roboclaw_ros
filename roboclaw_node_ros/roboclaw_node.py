@@ -253,8 +253,8 @@ class RoboclawNode(Node):
             statuses = u.decipher_rclaw_status(status)
             for state, message in statuses:
                 stat.summary(state, message)
+            self.get_logger().info("Got unit status: " + str(hex(status)))
         except Exception as e:
-            self.get_logger().warn("Got status: " + str(hex(status)))
             self.get_logger().warn("Diagnostics error: " + str(e))
             self.get_logger().debug(e)
             return
