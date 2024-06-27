@@ -3,18 +3,21 @@ import os
 from glob import glob
 from setuptools import setup
 
-package_name = "roboclaw_node_ros"
+package_name = "roboclaw_ros"
 
 # fetch values from package.xml
 setup(
-    name="roboclaw_node_ros",
+    name="roboclaw_ros",
     version="0.0.2",
     packages=[package_name],
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
         # Include all launch files.
-        (os.path.join("share", package_name, "launch"), glob("launch/*launch.[pxy][yma]*")),
+        (
+            os.path.join("share", package_name, "launch"),
+            glob("launch/*launch.[pxy][yma]*"),
+        ),
         # Include all config files
         (os.path.join("share", package_name, "config"), glob("config/*")),
     ],
@@ -24,12 +27,12 @@ setup(
     author_email="bwbazemore@uga.edu",
     maintainer="norlab-marmotte",
     maintainer_email="norlabmarmotte@gmail.com",
-    description="RoboClaw Node",
+    description="RoboClaw Driver for ROS 2",
     license="BSD",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "roboclaw_node = roboclaw_node_ros.roboclaw_node:main",
+            "roboclaw_node = roboclaw_ros.roboclaw_node:main",
         ],
     },
 )

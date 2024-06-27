@@ -8,7 +8,7 @@ def generate_launch_description():
 
     ld = LaunchDescription()
     config_folder = os.path.join(
-        get_package_share_directory("roboclaw_node_ros"),
+        get_package_share_directory("roboclaw_ros"),
         "config",
     )
 
@@ -16,7 +16,7 @@ def generate_launch_description():
 
     # Roboclaw node
     roboclaw_node = Node(
-        package="roboclaw_node_ros",
+        package="roboclaw_ros",
         executable="roboclaw_node",
         name="roboclaw_node",
         parameters=[

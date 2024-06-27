@@ -45,7 +45,7 @@ git clone https://github.com/norlab-ulaval/roboclaw_ros.git
 cd <workspace>
 colcon build --symlink-install --packages-select roboclaw_ros
 . install/local_setup.bash
-ros2 launch roboclaw_node_ros roboclaw_node.launch.py
+ros2 launch roboclaw_ros roboclaw_node.launch.py
 ```
 
 ## Parameters

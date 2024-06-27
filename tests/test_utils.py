@@ -1,4 +1,4 @@
-from roboclaw_node_ros.utils import ROBOCLAW_ERRORS, decipher_rclaw_status
+from roboclaw_ros.utils import ROBOCLAW_ERRORS, decipher_rclaw_status
 import pytest
 
 

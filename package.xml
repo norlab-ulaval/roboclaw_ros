@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>roboclaw_node_ros</name>
+  <name>roboclaw_ros</name>
   <version>0.0.2</version>
-  <description>RoboClaw Node</description>
+  <description>RoboClaw Driver for ROS 2</description>
   <author email="bwbazemore@uga.edu">Brad Bazemore</author>
   <license>BSD</license>
 
