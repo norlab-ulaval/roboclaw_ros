@@ -54,16 +54,18 @@ class RoboclawNode(Node):
             self.get_logger().fatal("Address out of range")
             self.shutdown("Address out of range")
 
-        # Movement params
-        self.max_speed_linear = self.init_parameter("max_speed_linear", 2.0)
-        self.max_speed_angular = self.init_parameter("max_speed_angular", 1.0)
-        self.stop_if_idle = self.init_parameter("stop_if_idle", True)
-        self.idle_timeout = self.init_parameter("idle_timeout", 1.0)
-
         # Odometry params
         self.TICKS_PER_METER = self.init_parameter("ticks_per_meter", 4342.2)
         self.TICKS_PER_ROTATION = self.init_parameter("ticks_per_rotation", 2780)
         self.BASE_WIDTH = self.init_parameter("base_width", 0.315)
+
+        # Movement params
+        self.max_speed_linear = self.init_parameter("max_speed_linear", 2.0)
+        self.max_speed_angular = self.init_parameter("max_speed_angular", 1.0)
+        self.accel = int(self.init_parameter("acceleration", 1.0) * self.TICKS_PER_METER)
+        self.swap_motors = self.init_parameter("swap_motors", False)
+        self.stop_if_idle = self.init_parameter("stop_if_idle", True)
+        self.idle_timeout = self.init_parameter("idle_timeout", 1.0)
 
         # Roboclaw params
         self.custom_pid = self.init_parameter("custom_pid", True)
@@ -79,8 +81,6 @@ class RoboclawNode(Node):
         self.PUBLISH_ENCODERS = self.init_parameter("publish_encoders", True)
         self.PUBLISH_ELEC = self.init_parameter("publish_elec", True)
         self.PUBLISH_TF = self.init_parameter("publish_tf", False)
-
-        # TODO: add a parameter for the acceleration (tried but it didn't work)
 
     def init_parameter(self, name, default):
         """Initialize a parameter and log it"""
@@ -131,11 +131,11 @@ class RoboclawNode(Node):
     def reset_device(self):
         """Reset the roboclaw speed and encoder counters"""
 
+        self.stop_motors()
         try:
-            self.driver.SpeedM1M2(0, 0)
             self.driver.ResetEncoders()
         except OSError as e:
-            self.get_logger().warn(f"Device reset OSError: {str(e.errno)}")
+            self.get_logger().warn(f"ResetEncoders OSError: {str(e.errno)}")
             self.get_logger().debug(e)
 
     def configure_device(self):
@@ -145,9 +145,6 @@ class RoboclawNode(Node):
         if self.custom_pid:
             self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
             self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
-
-        # self.driver.SetM1DefaultAccel(655000)
-        # self.driver.SetM2DefaultAccel(655000)
 
     def create_subscribers(self):
         """Create subscribers for the node"""
@@ -171,9 +168,10 @@ class RoboclawNode(Node):
             self.PUBLISH_ODOM,
             self.PUBLISH_ENCODERS,
             self.PUBLISH_TF,
+            self.swap_motors,
         )
         self.electrical_wrapper = ElectricalWrapper(
-            self, self.driver, self.PUBLISH_ELEC
+            self, self.driver, self.PUBLISH_ELEC, self.swap_motors
         )
 
     def create_timers(self):
@@ -204,17 +202,10 @@ class RoboclawNode(Node):
             self.get_logger().info(
                 f"Did not get command for {self.idle_timeout} second, stopping"
             )
-            try:
-                self.driver.SpeedM1M2(0, 0)
-                self.last_cmd_timestamp = now
-            except OSError as e:
-                self.get_logger().error("Could not stop")
-                self.get_logger().debug(e)
+            self.stop_motors()
 
     def cmd_vel_callback(self, twist):
         """Callback for /cmd_vel topic, move the robot according to the Twist message"""
-
-        self.last_cmd_timestamp = self.get_clock().now().nanoseconds
 
         # Limit the speed
         linear_x = min(
@@ -235,14 +226,18 @@ class RoboclawNode(Node):
         )
 
         self.get_logger().debug(
-            f"Sending command -> right: {str(right_speed)}, left: {str(left_speed)} (ticks/sec)"
+            f"Sending command -> left: {str(left_speed)}, right: {str(right_speed)} (ticks/sec)"
         )
 
         # Send the command
         try:
-            self.driver.SpeedM1M2(right_speed, left_speed)
+            if self.swap_motors:
+                self.driver.SpeedAccelM1M2(self.accel, right_speed, left_speed)
+            else:
+                self.driver.SpeedAccelM1M2(self.accel, left_speed, right_speed)
+            self.last_cmd_timestamp = self.get_clock().now().nanoseconds
         except OSError as e:
-            self.get_logger().warn("SpeedM1M2 OSError: " + str(e.errno))
+            self.get_logger().warn("SpeedAccelM1M2 OSError: " + str(e.errno))
             self.get_logger().debug(e)
 
     def diagnostics(self, stat):
@@ -259,21 +254,24 @@ class RoboclawNode(Node):
             self.get_logger().debug(e)
             return
         return stat
+    
+    def stop_motors(self):
+        """Stop the motors"""
+
+        try:
+            self.driver.SpeedAccelM1M2(self.accel, 0, 0)
+            self.last_cmd_timestamp = self.get_clock().now().nanoseconds
+        except OSError as e:
+            self.get_logger().error("Could not stop motors")
+            self.get_logger().debug(e)
 
     # TODO: need clean shutdown so motors stop even if new msgs are arriving
     def shutdown(self, str_msg):
         """Shutdown the node"""
 
         self.get_logger().info("Shutting down: " + str_msg)
-        try:
-            self.driver.SpeedM1M2(0, 0)
-        except OSError:
-            self.get_logger().error("Shutdown did not work trying again")
-            try:
-                self.driver.SpeedM1M2(0, 0)
-            except OSError as e:
-                self.get_logger().error("Could not shutdown motors!!!!")
-                self.get_logger().debug(e)
+        self.stop_motors()
+        self.stop_motors()  # Call twice to make sure
 
 
 def main(args=None):

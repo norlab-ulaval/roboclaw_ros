@@ -5,8 +5,10 @@ roboclaw_node:
     address: 128
 
     # Movement parameters
-    max_speed_linear: 4.0
-    max_speed_angular: 1.0
+    max_speed_linear: 4.0     # m/s
+    max_speed_angular: 1.0    # rad/s
+    acceleration: 2.0         # m/s^2
+    swap_motors: False        # Default assumes left = motor1 and right = motor2
     stop_if_idle: True
     idle_timeout: 0.5
 

@@ -23,6 +23,7 @@ class EncoderWrapper:
         pub_odom: bool,
         pub_encoders: bool,
         pub_tf: bool,
+        swap_motors: bool,
     ):
         """Encoder Wrapper
 
@@ -35,6 +36,7 @@ class EncoderWrapper:
             pub_odom (bool): Publish odometry data
             pub_encoders (bool): Publish encoder data
             pub_tf (bool): Publish the transform from odom to base_link
+            swap_motors (bool): Swap the left and right motors
         """
         self.TICKS_PER_METER = ticks_per_meter
         self.TICKS_PER_ROTATION = ticks_per_rotation
@@ -48,6 +50,7 @@ class EncoderWrapper:
         self.PUB_ODOM = pub_odom
         self.PUB_ENCODERS = pub_encoders
         self.PUB_TF = pub_tf
+        self.swap_motors = swap_motors
 
         # Encoder data
         self.timestamp = self.clock.now()
@@ -102,21 +105,31 @@ class EncoderWrapper:
 
         try:
             self.timestamp = self.clock.now()
-            status1, ticks1, ticks2 = self.driver.GetEncoderCounters()
-            status2, speed1, speed2 = self.driver.GetMotorAverageSpeeds()
+            status_enc, ticks1, ticks2 = self.driver.GetEncoderCounters()
+            status_speed, speed1, speed2 = self.driver.GetMotorAverageSpeeds()
         except Exception as e:
             self.logger.warn("Read encoders error: " + str(e.errno))
             self.logger.debug(e)
 
-        # Left motor encoder : M2 / Right motor encoder : M1
-        if status1 == 1:
-            self.right_ticks = [self.right_ticks[1], ticks1]
-            self.left_ticks = [self.left_ticks[1], ticks2]
-        if status2 == 1:
-            self.right_velocity = speed1
-            self.left_velocity = speed2
+        # Update the encoder ticks
+        if status_enc == 1:
+            if self.swap_motors:
+                self.right_ticks = [self.right_ticks[1], ticks1]
+                self.left_ticks = [self.left_ticks[1], ticks2]
+            else:
+                self.right_ticks = [self.right_ticks[1], ticks2]
+                self.left_ticks = [self.left_ticks[1], ticks1]
 
-        return status1 and status2
+        # Update the motor velocities
+        if status_speed == 1:
+            if self.swap_motors:
+                self.right_velocity = speed1
+                self.left_velocity = speed2
+            else:
+                self.right_velocity = speed2
+                self.left_velocity = speed1
+
+        return status_enc and status_speed
 
     def update_odometry(self):
         """Update the odometry estimation"""

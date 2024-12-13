@@ -1,17 +1,19 @@
 from norlab_custom_interfaces.msg import MotorState
 from tcr_roboclaw import Roboclaw
 from rclpy.node import Node
+from copy import deepcopy
 
 
 class ElectricalWrapper:
 
-    def __init__(self, node: Node, driver: Roboclaw, pub_elec: bool):
+    def __init__(self, node: Node, driver: Roboclaw, pub_elec: bool, swap_motors: bool):
         """Electrical Wrapper
 
         Args:
             node (rclpy.node.Node): ROS 2 node
             driver (tcr_roboclaw.Roboclaw): RoboClaw driver
             pub_elec (bool): Publish electrical data
+            swap_motors (bool): Swap the left and right motors
         """
 
         # Node parameters
@@ -20,6 +22,7 @@ class ElectricalWrapper:
         self.clock = self.node.get_clock()
         self.logger = self.node.get_logger()
         self.PUB_ELEC = pub_elec
+        self.swap_motors = swap_motors
 
         # Electrical data
         self.timestamp = self.clock.now()
@@ -83,10 +86,16 @@ class ElectricalWrapper:
         motor_state.voltage = self.voltage
         motor_state.temperature = self.temperature
 
-        motor_state.current = self.currents[0]
-        motor_state.duty = self.duty_cycles[0]
-        self.right_elec_pub.publish(motor_state)
+        motor_state1, motor_state2 = deepcopy(motor_state), deepcopy(motor_state)
 
-        motor_state.current = self.currents[1]
-        motor_state.duty = self.duty_cycles[1]
-        self.left_elec_pub.publish(motor_state)
+        motor_state1.current = self.currents[0]
+        motor_state1.duty = self.duty_cycles[0]
+        motor_state2.current = self.currents[1]
+        motor_state2.duty = self.duty_cycles[1]
+
+        if self.swap_motors:
+            self.right_elec_pub.publish(motor_state2)
+            self.left_elec_pub.publish(motor_state1)
+        else:
+            self.right_elec_pub.publish(motor_state1)
+            self.left_elec_pub.publish(motor_state2)
