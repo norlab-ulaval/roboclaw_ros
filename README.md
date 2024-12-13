@@ -59,6 +59,8 @@ The launch file can be configured at the command line with arguments, by changin
 | `address`            | `128`          | The address the RoboClaw is set to, 128 is 0x80                        |
 | `max_speed_linear`   | `2.0`          | Max linear speed allowed for motors in meters per second               |
 | `max_speed_angular`  | `2.0`          | Max angular speed allowed for motors in meters per second              |
+| `acceleration`       | `1.0`          | Desired acceleration for both motors                                   |
+| `swap_motors`        | `False`        | Swap left and right motors if needed (Default M1 -> Left, M2 -> Right) |
 | `stop_if_idle`       | `true`         | Stops movement if no velocity commands are received for `idle_timeout` |
 | `idle_timeout`       | `1.0`          | Duration, in seconds, after which motors are stopped when idle         |
 | `ticks_per_meter`    | `4000`         | The number of encoder ticks per meter of movement                      |
