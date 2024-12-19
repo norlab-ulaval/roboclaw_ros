@@ -50,6 +50,7 @@ class RoboclawNode(Node):
         self.DEV = self.init_parameter("dev", "/dev/ttyACM0")
         self.BAUD = self.init_parameter("baud", 115200)
         self.ADDRESS = self.init_parameter("address", 128)
+        self.serial_timeout = self.init_parameter("serial_timeout", 0.0)    
         if self.ADDRESS > 0x87 or self.ADDRESS < 0x80:
             self.get_logger().fatal("Address out of range")
             self.shutdown("Address out of range")
@@ -81,6 +82,11 @@ class RoboclawNode(Node):
         self.PUBLISH_ENCODERS = self.init_parameter("publish_encoders", True)
         self.PUBLISH_ELEC = self.init_parameter("publish_elec", True)
         self.PUBLISH_TF = self.init_parameter("publish_tf", False)
+
+        # IO params
+        self.S3Mode = self.init_parameter("S3_mode", 0x00)
+        self.S4Mode = self.init_parameter("S4_mode", 0x00)
+        self.S5Mode = self.init_parameter("S5_mode", 0x00)
 
     def init_parameter(self, name, default):
         """Initialize a parameter and log it"""
@@ -141,10 +147,16 @@ class RoboclawNode(Node):
     def configure_device(self):
         """Configure the Roboclaw device with the ROS parameters"""
 
+        # Set the serial timeout
+        self.driver.SetSerialTimeout(int(self.serial_timeout * 10))
+
         # Set PID parameters
         if self.custom_pid:
             self.driver.SetM1VelocityPID(self.P, self.I, self.D, self.qpps)
             self.driver.SetM2VelocityPID(self.P, self.I, self.D, self.qpps)
+
+        # Set S3, S4, S5 modes
+        self.driver.SetPinFunctions(self.S3Mode, self.S4Mode, self.S5Mode)
 
     def create_subscribers(self):
         """Create subscribers for the node"""
