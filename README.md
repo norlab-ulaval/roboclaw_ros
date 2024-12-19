@@ -57,6 +57,7 @@ The launch file can be configured at the command line with arguments, by changin
 | `dev`                | `/dev/ttyACM0` | Path to the RoboClaw device path                                       |
 | `baud`               | `115200`       | Baud rate the RoboClaw is configured for                               |
 | `address`            | `128`          | The address the RoboClaw is set to, 128 is 0x80                        |
+| `serial_timeout`     | `0.0`          | Timeout to cutoff driver (serial link) - Disabled if 0                 |
 | `max_speed_linear`   | `2.0`          | Max linear speed allowed for motors in meters per second               |
 | `max_speed_angular`  | `2.0`          | Max angular speed allowed for motors in meters per second              |
 | `acceleration`       | `1.0`          | Desired acceleration for both motors                                   |
@@ -77,6 +78,9 @@ The launch file can be configured at the command line with arguments, by changin
 | `publish_encoders`   | `true`         | Publishes EncoderState if set to true                                  |
 | `publish_elec`       | `true`         | Publishes MotorState if set to true                                    |
 | `publish_tf`         | `false`        | Broadcasts TF from `odom` to `base_link` if set to true                |
+| `S3_mode`            | `0x00`         | Mode for the S3 I/O pin on the Roboclaw                                |
+| `S4_mode`            | `0x00`         | Mode for the S4 I/O pin on the Roboclaw                                |
+| `S5_mode`            | `0x00`         | Mode for the S5 I/O pin on the Roboclaw                                |
 
 ## Topics
 
