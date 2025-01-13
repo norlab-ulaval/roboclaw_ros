@@ -12,18 +12,16 @@ def generate_launch_description():
         "config",
     )
 
-    print(os.path.join(config_folder, "roboclaw.yaml"))
-
     # Roboclaw node
     roboclaw_node = Node(
         package="roboclaw_ros",
         executable="roboclaw_node",
         name="roboclaw_node",
         parameters=[
-            os.path.join(config_folder, "roboclaw.yaml"),
+            os.path.join(config_folder, "roboclaw_dual.yaml"),
         ],
         remappings=[
-            ("/cmd_vel", "/twist_mux/cmd_vel"),
+            ("/cmd_vel", "/cmd_vel"),
         ],
     )
     ld.add_action(roboclaw_node)
