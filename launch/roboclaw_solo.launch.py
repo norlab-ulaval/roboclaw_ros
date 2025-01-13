@@ -23,6 +23,7 @@ def generate_launch_description():
         remappings=[
             ("/velocity", "/velocity"),
         ],
+        arguments=["--ros-args", "--log-level", "DEBUG"]
     )
     ld.add_action(roboclaw_node)
 

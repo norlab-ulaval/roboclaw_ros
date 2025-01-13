@@ -1,45 +1,46 @@
-roboclaw_node:
-  ros__parameters:
-    dev: '/dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_2x30A-if00'
-    baud: 460800
-    address: 128
-    serial_timeout: 0.5       # 0 to disable
+/**:
+  roboclaw_solo:
+    ros__parameters:
+      dev: '/dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_Solo_30A-if00'
+      baud: 460800
+      address: 130
+      serial_timeout: 0.5       # 0 to disable
 
-    # Movement parameters
-    max_speed: 4.0            # m/s
-    acceleration: 2.0         # m/s^2
-    stop_if_idle: True
-    idle_timeout: 0.5
+      # Movement parameters
+      max_speed: 4.0            # m/s
+      acceleration: 2.0         # m/s^2
+      stop_if_idle: True
+      idle_timeout: 0.5
 
-    # Odometry parameters
-    ticks_per_meter: 3802.4
-    ticks_per_rotation: 2780
+      # Odometry parameters
+      ticks_per_meter: 3802.4
+      ticks_per_rotation: 2780
 
-    # PID parameters
-    custom_pid: True
-    p_constant: 3.0
-    i_constant: 0.42
-    d_constant: 0.0
-    qpps: 6000
-  
-    # Publish parameters
-    odom_rate: 20
-    elec_rate: 10
-    publish_encoders: True
-    publish_elec: True
+      # PID parameters
+      custom_pid: True
+      p_constant: 3.0
+      i_constant: 0.42
+      d_constant: 0.0
+      qpps: 6000
+    
+      # Publish parameters
+      odom_rate: 20
+      elec_rate: 10
+      publish_encoders: True
+      publish_elec: True
 
-    # I/O Modes
-    S3_mode: 0x01
-    S4_mode: 0x00
-    S5_mode: 0x00
+      # I/O Modes
+      S3_mode: 0x01
+      S4_mode: 0x00
+      S5_mode: 0x00
 
-    ## Available Modes:
-    # Mode : S3mode           / S4mode           / S5mode
-    # 0x00 : Default          / Disabled         / Disabled
-    # 0x01 : E-Stop           / E-Stop           / E-Stop
-    # 0x81 : E-Stop(Latching) / E-Stop(Latching) / E-Stop(Latching)
-    # 0x14 : Voltage Clamp    / Voltage Clamp    / Voltage Clamp
-    # 0x24 : RS485 Direction  / -                / -
-    # 0x84 : Encoder toggle   / -                / -
-    # 0x04 : -                / Brake            / Brake
+      ## Available Modes:
+      # Mode : S3mode           / S4mode           / S5mode
+      # 0x00 : Default          / Disabled         / Disabled
+      # 0x01 : E-Stop           / E-Stop           / E-Stop
+      # 0x81 : E-Stop(Latching) / E-Stop(Latching) / E-Stop(Latching)
+      # 0x14 : Voltage Clamp    / Voltage Clamp    / Voltage Clamp
+      # 0x24 : RS485 Direction  / -                / -
+      # 0x84 : Encoder toggle   / -                / -
+      # 0x04 : -                / Brake            / Brake
 
