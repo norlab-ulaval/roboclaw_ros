@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import diagnostic_updater
 import rclpy
-from geometry_msgs.msg import Twist
+from std_msgs.msg import Float32
 from rclpy.node import Node
 
 from tcr_roboclaw import Roboclaw
@@ -152,7 +152,7 @@ class RoboclawNode(Node):
         """Create subscribers for the node"""
 
         self.cmd_vel_sub = self.create_subscription(
-            Twist,
+            Float32,
             "/velocity",
             self.velocity_callback,
             1,
