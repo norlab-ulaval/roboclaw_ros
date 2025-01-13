@@ -32,7 +32,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "roboclaw_node = roboclaw_ros.roboclaw_node:main",
+            "roboclaw_dual = roboclaw_ros.roboclaw_dual:main",
+            "roboclaw_solo = roboclaw_ros.roboclaw_solo:main",
         ],
     },
 )

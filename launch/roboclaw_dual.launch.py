@@ -15,8 +15,8 @@ def generate_launch_description():
     # Roboclaw node
     roboclaw_node = Node(
         package="roboclaw_ros",
-        executable="roboclaw_node",
-        name="roboclaw_node",
+        executable="roboclaw_dual",
+        name="roboclaw_dual",
         parameters=[
             os.path.join(config_folder, "roboclaw_dual.yaml"),
         ],
