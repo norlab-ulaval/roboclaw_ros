@@ -166,11 +166,11 @@ class RoboclawNode(Node):
         #         1.0 / self.ODOM_RATE,
         #         self.encoder_wrapper.update_and_publish,
         #     )
-        if self.ELEC_RATE:
-            self.elec_timer = self.create_timer(
-                1.0 / self.ELEC_RATE,
-                self.electrical_wrapper.update_and_publish,
-            )
+        # if self.ELEC_RATE:
+        #     self.elec_timer = self.create_timer(
+        #         1.0 / self.ELEC_RATE,
+        #         self.electrical_wrapper.update_and_publish,
+        #     )
 
         self.idle_timer = self.create_timer(1 / 30, self.idle_callback)
         self.dynamic_params_timer = self.create_timer(1.0, self.update_parameters)
