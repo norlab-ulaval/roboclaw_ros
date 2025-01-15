@@ -153,7 +153,7 @@ class RoboclawNode(Node):
 
         self.cmd_vel_sub = self.create_subscription(
             Float32,
-            "/velocity",
+            "plow/velocity",
             self.velocity_callback,
             1,
         )
