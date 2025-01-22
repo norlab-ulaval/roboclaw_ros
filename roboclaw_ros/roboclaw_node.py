@@ -141,8 +141,7 @@ class RoboclawNode(Node):
         try:
             self.driver.ResetEncoders()
         except OSError as e:
-            self.get_logger().warn(f"ResetEncoders OSError: {str(e.errno)}")
-            self.get_logger().debug(e)
+            self.get_logger().warn(f"ResetEncoders OSError: {str(e)}")
 
     def configure_device(self):
         """Configure the Roboclaw device with the ROS parameters"""
@@ -231,10 +230,10 @@ class RoboclawNode(Node):
 
         # Convert to motor speeds
         right_speed = int(
-            (linear_x + angular_z * self.BASE_WIDTH) * self.TICKS_PER_METER
+            (linear_x + angular_z * self.BASE_WIDTH/2) * self.TICKS_PER_METER
         )  # ticks/s
         left_speed = int(
-            (linear_x - angular_z * self.BASE_WIDTH) * self.TICKS_PER_METER
+            (linear_x - angular_z * self.BASE_WIDTH/2) * self.TICKS_PER_METER
         )
 
         self.get_logger().debug(
@@ -249,11 +248,12 @@ class RoboclawNode(Node):
                 self.driver.SpeedAccelM1M2(self.accel, left_speed, right_speed)
             self.last_cmd_timestamp = self.get_clock().now().nanoseconds
         except OSError as e:
-            self.get_logger().warn("SpeedAccelM1M2 OSError: " + str(e.errno))
-            self.get_logger().debug(e)
+            self.get_logger().warn(f"SpeedAccelM1M2 OSError: {str(e)}")
 
     def diagnostics(self, stat):
         """Read the error status of the Roboclaw and report it as diagnostics"""
+
+        stat.summary(diagnostic_updater.DiagnosticStatus.STALE, "No data")
 
         try:
             status = self.driver.ReadError()[1]
