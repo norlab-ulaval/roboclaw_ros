@@ -56,6 +56,8 @@ class ElectricalWrapper:
     def poll_electrical_data(self):
         """Poll electrical data from the Roboclaw"""
 
+        status1, status2, status3, status4 = 0, 0, 0, 0
+
         try:
             self.timestamp = self.clock.now()
             status1, *currents = self.driver.ReadCurrents()
@@ -63,8 +65,7 @@ class ElectricalWrapper:
             status3, *pwms = self.driver.ReadPWMs()
             status4, temp = self.driver.ReadTemp()
         except Exception as e:
-            self.logger.warn("Read electrical data error: " + str(e.errno))
-            self.logger.debug(e)
+            self.logger.warn(f"Read electrical data error: {str(e)}")
 
         if status1 == 1:
             self.currents = [curr / 100 for curr in currents]

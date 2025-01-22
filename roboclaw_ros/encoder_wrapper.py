@@ -103,13 +103,14 @@ class EncoderWrapper:
     def poll_encoders(self):
         """Poll the encoder data from the hardware"""
 
+        status_enc, status_speed = 0, 0
+
         try:
             self.timestamp = self.clock.now()
             status_enc, ticks1, ticks2 = self.driver.GetEncoderCounters()
             status_speed, speed1, speed2 = self.driver.GetMotorAverageSpeeds()
         except Exception as e:
-            self.logger.warn("Read encoders error: " + str(e.errno))
-            self.logger.debug(e)
+            self.logger.warn(f"Read encoders error: {str(e)}")
 
         # Update the encoder ticks
         if status_enc == 1:
