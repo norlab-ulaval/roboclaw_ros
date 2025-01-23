@@ -210,7 +210,7 @@ class RoboclawNode(Node):
             self.stop_if_idle
             and now - self.last_cmd_timestamp > self.idle_timeout * 1e9
         ):
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"Did not get command for {self.idle_timeout} second, stopping"
             )
             self.stop_motors()
