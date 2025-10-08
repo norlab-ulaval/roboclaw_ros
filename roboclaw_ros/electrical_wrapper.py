@@ -1,4 +1,4 @@
-from norlab_custom_interfaces.msg import MotorState
+from roboclaw_msgs.msg import MotorState
 from tcr_roboclaw import Roboclaw
 from rclpy.node import Node
 from copy import deepcopy

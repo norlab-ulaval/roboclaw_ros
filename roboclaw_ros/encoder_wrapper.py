@@ -4,7 +4,7 @@ from tcr_roboclaw import Roboclaw
 from rclpy.node import Node
 from geometry_msgs.msg import Quaternion, TransformStamped
 from nav_msgs.msg import Odometry
-from norlab_custom_interfaces.msg import EncoderState
+from roboclaw_msgs.msg import EncoderState
 from tf_transformations import quaternion_from_euler
 from tf2_ros import TransformBroadcaster
 

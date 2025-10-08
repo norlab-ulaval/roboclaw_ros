@@ -94,10 +94,10 @@ Velocity commands for the mobile base.
 `/motors/odometry` [(nav_msgs/Odometry)](https://github.com/ros2/common_interfaces/blob/humble/nav_msgs/msg/Odometry.msg)
 Odometry output from the mobile base.
 
-`/motors/{left/right}/encoder` [(norlab_custom_interfaces/EncoderState)](https://github.com/norlab-ulaval/norlab_custom_interfaces/blob/main/msg/EncoderState.msg)
+`/motors/{left/right}/encoder` [(roboclaw_msgs/EncoderState)](https://github.com/norlab-ulaval/roboclaw_msgs/blob/main/msg/EncoderState.msg)
 Encoder state for the left and right motors.
 
-`/motors/{left/right}/electrical` [(norlab_custom_interfaces/MotorState)](https://github.com/norlab-ulaval/norlab_custom_interfaces/blob/main/msg/MotorState.msg)
+`/motors/{left/right}/electrical` [(roboclaw_msgs/MotorState)](https://github.com/norlab-ulaval/roboclaw_msgs/blob/main/msg/MotorState.msg)
 Electrical data for both motors.
 
 ### RoboClaw Node graph
@@ -110,11 +110,11 @@ flowchart LR
 /foxglove_bridge[ /foxglove_bridge ]:::node
 /twist_mux/cmd_vel([ /twist_mux/cmd_vel<br>geometry_msgs/msg/Twist ]):::topic
 /diagnostics([ /diagnostics<br>diagnostic_msgs/msg/DiagnosticArray ]):::topic
-/motors/left/electrical([ /motors/left/electrical<br>norlab_custom_interfaces/msg/MotorState ]):::bugged
-/motors/left/encoder([ /motors/left/encoder<br>norlab_custom_interfaces/msg/EncoderState ]):::bugged
+/motors/left/electrical([ /motors/left/electrical<br>roboclaw_msgs/msg/MotorState ]):::bugged
+/motors/left/encoder([ /motors/left/encoder<br>roboclaw_msgs/msg/EncoderState ]):::bugged
 /motors/odometry([ /motors/odometry<br>nav_msgs/msg/Odometry ]):::bugged
-/motors/right/electrical([ /motors/right/electrical<br>norlab_custom_interfaces/msg/MotorState ]):::bugged
-/motors/right/encoder([ /motors/right/encoder<br>norlab_custom_interfaces/msg/EncoderState ]):::bugged
+/motors/right/electrical([ /motors/right/electrical<br>roboclaw_msgs/msg/MotorState ]):::bugged
+/motors/right/encoder([ /motors/right/encoder<br>roboclaw_msgs/msg/EncoderState ]):::bugged
 
 
 /twist_mux/cmd_vel --> /roboclaw_node
