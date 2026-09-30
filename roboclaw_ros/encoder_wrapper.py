@@ -104,11 +104,12 @@ class EncoderWrapper:
         """Poll the encoder data from the hardware"""
 
         status_enc, status_speed = 0, 0
-
         try:
             self.timestamp = self.clock.now()
-            status_enc, ticks1, ticks2 = self.driver.GetEncoderCounters()
-            status_speed, speed1, speed2 = self.driver.GetMotorAverageSpeeds()
+            enc_result = self.driver.GetEncoderCounters()
+            status_enc, ticks1, ticks2 = enc_result[0], enc_result[1], enc_result[2]
+            speed_result = self.driver.GetMotorAverageSpeeds()
+            status_speed, speed1, speed2 = speed_result[0], speed_result[1], speed_result[2]
         except Exception as e:
             self.logger.warn(f"Read encoders error: {str(e)}")
 
